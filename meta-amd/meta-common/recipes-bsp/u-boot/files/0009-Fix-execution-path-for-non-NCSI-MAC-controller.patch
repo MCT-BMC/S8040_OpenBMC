@@ -1,0 +1,94 @@
+From 4630ea126ed07cea03a31aacec34790645da77c0 Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Fri, 1 Mar 2024 10:43:14 +0800
+Subject: [PATCH 1/3] Fix execution path for non-NCSI MAC controller
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ cmd/net.c             |  6 ++++++
+ drivers/net/phy/phy.c | 16 +++++++++++++++-
+ include/phy.h         |  1 +
+ net/net.c             |  7 ++++++-
+ 4 files changed, 28 insertions(+), 2 deletions(-)
+
+diff --git a/cmd/net.c b/cmd/net.c
+index 7d2c21ba4d..18675b4e67 100644
+--- a/cmd/net.c
++++ b/cmd/net.c
+@@ -462,6 +462,12 @@ U_BOOT_CMD(
+ static int do_ncsi(cmd_tbl_t *cmdtp, int flag, int argc,
+ 		   char * const argv[])
+ {
++	if (!phy_interface_is_ncsi() || !ncsi_active()) {
++		printf("Device not configured for NC-SI\n");
++		return CMD_RET_FAILURE;
++	}
++
++
+ 	if (net_loop(NCSI) < 0)
+ 		return CMD_RET_FAILURE;
+ 
+diff --git a/drivers/net/phy/phy.c b/drivers/net/phy/phy.c
+index daea26c451..43ba579d67 100644
+--- a/drivers/net/phy/phy.c
++++ b/drivers/net/phy/phy.c
+@@ -932,7 +932,9 @@ struct phy_device *phy_connect(struct mii_dev *bus, int addr,
+ #endif
+ 
+ #ifdef CONFIG_PHY_NCSI
+-	phydev = phy_device_create(bus, 0, PHY_NCSI_ID, false, interface);
++	//phydev = phy_device_create(bus, 0, PHY_NCSI_ID, false, interface);
++	if (!phydev && interface == PHY_INTERFACE_MODE_NCSI)
++		phydev = phy_device_create(bus, 0, PHY_NCSI_ID, false, interface);
+ #endif
+ 
+ 	if (!phydev)
+@@ -988,3 +990,15 @@ int phy_get_interface_by_name(const char *str)
+ 
+ 	return -1;
+ }
++
++bool phy_interface_is_ncsi(void)
++{
++#ifdef CONFIG_PHY_NCSI
++	struct udevice *dev = eth_get_dev();
++	struct eth_pdata *pdata = dev_get_platdata(dev);
++
++	return pdata->phy_interface == PHY_INTERFACE_MODE_NCSI;
++#else
++	return 0;
++#endif
++}
+diff --git a/include/phy.h b/include/phy.h
+index ed21775f3b..8d766f66fe 100644
+--- a/include/phy.h
++++ b/include/phy.h
+@@ -287,6 +287,7 @@ static inline bool phy_interface_is_sgmii(struct phy_device *phydev)
+ 		phydev->interface <= PHY_INTERFACE_MODE_QSGMII;
+ }
+ 
++bool phy_interface_is_ncsi(void);
+ /* PHY UIDs for various PHYs that are referenced in external code */
+ #define PHY_UID_CS4340  	0x13e51002
+ #define PHY_UID_CS4223  	0x03e57003
+diff --git a/net/net.c b/net/net.c
+index f0f9cd4d94..36104a1e1e 100644
+--- a/net/net.c
++++ b/net/net.c
+@@ -409,7 +409,12 @@ int net_loop(enum proto_t protocol)
+ 	debug_cond(DEBUG_INT_STATE, "--- net_loop Entry\n");
+ 
+ #ifdef CONFIG_PHY_NCSI
+-	if (protocol != NCSI && !ncsi_active()) {
++	/* XXX workaround
++	 * We need to update the current ETH before running the check(phy_interface_is_ncsi).
++	 * Otherwise, the check will be performed on the old ETH, not the newest one.
++	 */
++	eth_set_current();
++	if (phy_interface_is_ncsi() && protocol != NCSI && !ncsi_active()) {
+ 		printf("Configuring NCSI\n");
+ 		if (net_loop(NCSI) < 0)
+ 			return ret;
+-- 
+2.17.1
+

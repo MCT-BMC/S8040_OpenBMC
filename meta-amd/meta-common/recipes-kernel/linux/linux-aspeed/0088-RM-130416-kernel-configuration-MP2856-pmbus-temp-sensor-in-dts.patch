@@ -1,0 +1,65 @@
+From e792c60c994f8d226861c244d2f06a2b5e5c03cc Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Tue, 9 Apr 2024 13:27:45 +0800
+Subject: [PATCH] [RM#130416][kernel] configuration MP2856 pmbus temp sensors
+ in kernel dts
+
+Tag#: 03.54.23.0063
+Issue#: IB22130008
+Severity: Normal
+Category: Kernel
+Symptom: N/A
+RootCause: N/A
+Description: configuration MP2856 pmbus temp sensors in kernel dts
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 29 ++++++++++++++++++-
+ 1 file changed, 28 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 79a2faa12865..118301605839 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -193,7 +193,34 @@ &i2c3 {
+ 	status = "okay";
+ };
+ &i2c4 {
+-	status = "okay";
++        status = "okay";
++        mp2856@61 {
++                compatible = "pmbus";
++                reg = <0x61>;
++                channel@0 {
++                        reg = <0>;
++                        sensor-type = "temperature";
++                        temperature-mode = "thermistor";
++                };
++        };
++        mp2856@62 {
++                compatible = "pmbus";
++                reg = <0x62>;
++                channel@0 {
++                        reg = <0>;
++                        sensor-type = "temperature";
++                        temperature-mode = "thermistor";
++                };
++        };
++        mp2856@63 {
++                compatible = "pmbus";
++                reg = <0x63>;
++                channel@0 {
++                        reg = <0>;
++                        sensor-type = "temperature";
++                        temperature-mode = "thermistor";
++                };
++        };
+ };
+ &i2c5 {
+ 	status = "okay";
+-- 
+2.43.2
+

@@ -1,0 +1,22 @@
+From c3ccbc2c79c0e393cb4c1f6d318b455f133a49ed Mon Sep 17 00:00:00 2001
+From: honda <honda.lin@mic.com.tw>
+Date: Mon, 15 Apr 2024 16:59:52 +0800
+Subject: [PATCH] Enable devmem
+
+---
+ drivers/char/mem.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/drivers/char/mem.c b/drivers/char/mem.c
+index 789b08ab2c8f..b6b8340a1ffb 100644
+--- a/drivers/char/mem.c
++++ b/drivers/char/mem.c
+@@ -1077,6 +1077,8 @@ static int __init chr_dev_init(void)
+ {
+ 	int minor;
+ 
++	devmem = true;
++
+ 	if (register_chrdev(MEM_MAJOR, "mem", &memory_fops))
+ 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
+ 

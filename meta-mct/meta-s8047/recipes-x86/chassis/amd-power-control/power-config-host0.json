@@ -1,0 +1,91 @@
+{
+    "gpio_configs": [
+        {
+            "Name": "IdButton",
+            "LineName": "BMC_IDLED_ON_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "NMIButton",
+            "LineName": "PASSTH_IN",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "NMIOut",
+            "LineName": "PASSTH_OUT",
+            "Type": "GPIO",
+            "Polarity": "ActiveHigh"
+        },
+        {
+            "Name": "PostComplete",
+            "LineName": "FM_BIOS_POST_CMPLT_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "PowerButton",
+            "LineName": "PWR_BTN_IN_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "PowerOk",
+            "LineName": "ATX_PWROK",
+            "Type": "GPIO",
+            "Polarity": "ActiveHigh"
+        },
+        {
+            "Name": "PowerOut",
+            "LineName": "PWR_BTN_OUT_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "ResetButton",
+            "LineName": "RST_BTN_IN_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "ResetOut",
+            "LineName": "RST_BTN_OUT_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "SioOnControl",
+            "LineName": "SIO_ONCTL_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        },
+        {
+            "Name": "SioPowerGood",
+            "LineName": "SIOPWRGD",
+            "Type": "GPIO",
+            "Polarity": "ActiveHigh"
+        },
+        {
+            "Name": "SIOS5",
+            "LineName": "SIO_SLPS4_L",
+            "Type": "GPIO",
+            "Polarity": "ActiveLow"
+        }
+    ],
+    "timing_configs": {
+        "PowerPulseMs": 200,
+        "ForceOffPulseMs": 15000,
+        "ResetPulseMs": 500,
+        "PowerCycleMs": 5000,
+        "SioPowerGoodWatchdogMs": 1000,
+        "PsPowerOKWatchdogMs": 8000,
+        "GracefulPowerOffS": 300,
+        "WarmResetCheckMs": 500,
+        "PowerOffSaveMs": 7000,
+        "DbusGetPropertyRetry": 1000
+    },
+    "event_configs": {
+        "NMIWhenPoweredOff": true
+    }
+}

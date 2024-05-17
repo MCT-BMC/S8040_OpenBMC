@@ -1,0 +1,68 @@
+From 1c9d6e89f9a762575482a477915ff17b269c664c Mon Sep 17 00:00:00 2001
+From: OpenEmbedded <oe.patch@oe>
+Date: Tue, 2 Apr 2024 13:12:24 +0800
+Subject: [PATCH] [RM#129516][kernel] configuration NCT7802Y temp sensors in
+ kernel dts
+
+Tag#: 03.54.23.0063
+Issue#: IB22130008
+Severity: Normal
+Category: Kernel
+Symptom: N/A
+RootCause: N/A
+Description: configuration NCT7802Y temp sensors in kernel dts
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 32 +++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index c174ca623043..79a2faa12865 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -156,6 +156,38 @@ &i2c1 {
+ };
+ &i2c2 {
+ 	status = "okay";
++	/* Hardware monitor with temperature sensors */
++	nct7802@28 {
++		compatible = "nuvoton,nct7802";
++		reg = <0x28>;
++
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		channel@0 {
++			reg = <0>;
++                        sensor-type = "temperature";
++                        temperature-mode = "thermistor";
++		};
++
++		channel@1 {
++			reg = <1>;
++			sensor-type = "temperature";
++			temperature-mode = "thermistor";
++		};
++
++		channel@2 {
++			reg = <2>;
++			sensor-type = "temperature";
++			temperature-mode = "thermistor";
++		};
++
++		channel@3 {
++			reg = <3>;
++                        sensor-type = "temperature";
++                        temperature-mode = "thermistor";
++		};
++        };
+ };
+ &i2c3 {
+ 	status = "okay";
+-- 
+2.43.2
+

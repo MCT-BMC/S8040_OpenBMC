@@ -1,0 +1,22 @@
+From d4d214bfa9940e0f82aaf7cf8e8a5845929eacd2 Mon Sep 17 00:00:00 2001
+From: honda <honda.lin@mic.com.tw>
+Date: Mon, 15 Apr 2024 16:36:47 +0800
+Subject: [PATCH] Enable devmem
+
+---
+ configs/ast2600_openbmc_defconfig | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configs/ast2600_openbmc_defconfig b/configs/ast2600_openbmc_defconfig
+index 2e2df2e3a2..44f1e2b50a 100755
+--- a/configs/ast2600_openbmc_defconfig
++++ b/configs/ast2600_openbmc_defconfig
+@@ -11,7 +11,7 @@ CONFIG_ARMV7_BOOT_SEC_DEFAULT=y
+ CONFIG_NR_DRAM_BANKS=1
+ CONFIG_FIT=y
+ CONFIG_USE_BOOTARGS=y
+-CONFIG_BOOTARGS="console=ttyS4,115200n8 root=/dev/ram rw"
++CONFIG_BOOTARGS="console=ttyS4,115200n8 mem.devmem=y root=/dev/ram rw"
+ CONFIG_USE_BOOTCOMMAND=y
+ CONFIG_BOOTCOMMAND="bootm 20100000"
+ CONFIG_SYS_CONSOLE_ENV_OVERWRITE=y

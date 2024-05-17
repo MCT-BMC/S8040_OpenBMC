@@ -1,0 +1,101 @@
+From 0bc8934aca1fc71a6a879a0287666ac41c7e3360 Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Mon, 4 Mar 2024 13:55:01 +0800
+Subject: [PATCH] [RM#126674][kernel] Change Cinnabar BMC Flash layout from
+ 128MB to 64MB
+
+Tag#: 03.54.23.0009
+Issue#: IB21780023
+Severity: Normal
+Category: Kernel
+Symptom: N/A
+RootCause: N/A
+Description: Change Cinnabar BMC Flash layout from 128MB to 64MB
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: IB19670000
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts  |  2 +-
+ arch/arm/boot/dts/aspeed-bmc-amd-shale.dts     |  2 +-
+ arch/arm/boot/dts/aspeed-bmc-amd-sunstone.dts  |  2 +-
+ arch/arm/boot/dts/openbmc-flash-layout-64.dtsi | 14 +++++++-------
+ 4 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 8540db9b29de..fdeb4016df72 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -118,7 +118,7 @@
+ 		label = "bmc";
+ 		spi-tx-bus-width = <4>;
+ 		spi-rx-bus-width = <4>;
+-		#include "openbmc-flash-layout-128.dtsi"
++		#include "openbmc-flash-layout-64.dtsi"
+ 	};
+ };
+ 
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-shale.dts b/arch/arm/boot/dts/aspeed-bmc-amd-shale.dts
+index d34e228aa170..2abb778be2cd 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-shale.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-shale.dts
+@@ -117,7 +117,7 @@
+ 		label = "bmc";
+ 		spi-tx-bus-width = <4>;
+ 		spi-rx-bus-width = <4>;
+-		#include "openbmc-flash-layout-128.dtsi"
++		#include "openbmc-flash-layout-64.dtsi"
+ 	};
+ };
+ 
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-sunstone.dts b/arch/arm/boot/dts/aspeed-bmc-amd-sunstone.dts
+index 76836af261a6..8626ae302277 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-sunstone.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-sunstone.dts
+@@ -116,7 +116,7 @@
+ 		label = "bmc";
+ 		spi-tx-bus-width = <4>;
+ 		spi-rx-bus-width = <4>;
+-		#include "openbmc-flash-layout-128.dtsi"
++		#include "openbmc-flash-layout-64.dtsi"
+ 	};
+ };
+ 
+diff --git a/arch/arm/boot/dts/openbmc-flash-layout-64.dtsi b/arch/arm/boot/dts/openbmc-flash-layout-64.dtsi
+index 91163867be34..797e65a61a43 100644
+--- a/arch/arm/boot/dts/openbmc-flash-layout-64.dtsi
++++ b/arch/arm/boot/dts/openbmc-flash-layout-64.dtsi
+@@ -9,22 +9,22 @@ partitions {
+ 	#size-cells = <1>;
+ 
+ 	u-boot@0 {
+-		reg = <0x0 0x60000>; // 384KB
++		reg = <0x0 0xe0000>; // 896KB
+ 		label = "u-boot";
+ 	};
+ 
+-	u-boot-env@60000 {
+-		reg = <0x60000 0x20000>; // 128KB
++	u-boot-env@e0000 {
++		reg = <0xe0000 0x20000>; // 128KB
+ 		label = "u-boot-env";
+ 	};
+ 
+-	kernel@80000 {
+-		reg = <0x80000 0x500000>; // 5MB
++	kernel@100000 {
++		reg = <0x100000 0x500000>; // 9MB
+ 		label = "kernel";
+ 	};
+ 
+-	rofs@580000 {
+-		reg = <0x580000 0x2a80000>; // 42.5MB
++	rofs@a00000 {
++		reg = <0x600000 0x2A00000>; // 38MB
+ 		label = "rofs";
+ 	};
+ 
+-- 
+2.17.1
+

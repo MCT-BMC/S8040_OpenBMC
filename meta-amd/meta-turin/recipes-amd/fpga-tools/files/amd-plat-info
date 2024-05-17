@@ -1,0 +1,67 @@
+#!/bin/bash
+
+set +e
+exec 2> /dev/null # remove on debug
+
+I2CBUS=0
+FPGAADDR=0x50
+
+function read_reg()
+{
+    local FPGA_REG=$1
+    local DATA=$(i2cget -y $I2CBUS $FPGAADDR $(printf "0x%x" $FPGA_REG))
+    echo -ne $((DATA))
+}
+function get_board_info ()
+{
+    local name
+    # Read Board ID from u-boot env
+    boardID=$(read_reg 1)
+    case $boardID in
+    "102" | "110" | "111")
+        name="chalupa"
+        ;;
+    "103")
+        name="huambo"
+        ;;
+    "104" | "112" | "113")
+        name="galena"
+        ;;
+    "105")
+        name="recluse"
+        ;;
+    "106" | "114" | "115")
+        name="purico"
+        ;;
+    "107" | "116" | "117")
+        name="volcano"
+        ;;
+    *)
+        name="turin"
+        ;;
+    esac
+    if [ "$1" == "name" ]; then
+        echo -ne $name
+    fi
+    if [ "$1" == "rev" ]; then
+        revID=`hexdump -c /sys/bus/i2c/devices/7-0050/eeprom -s 24 -n 1 | head -n 1| awk '{ print $2}'`
+        echo -ne $revID
+    fi
+    if [ "$1" == "id" ]; then
+        echo -ne $boardID
+    fi
+    echo " "
+}
+
+function get_hpm_fpga_ver()
+{
+    REV_W=$(read_reg 6)
+    REV_X=$(read_reg 5)
+    REV_Y=$(read_reg 4)
+    REV_Z=$(read_reg 3)
+    echo -ne "$REV_W.$REV_X.$REV_Y.$REV_Z"
+}
+# all arguments are function names. invoke directly
+if [ ! -z "$1" ] ; then
+    $@
+fi

@@ -1,0 +1,46 @@
+From 1ca6342d48827d921c2631ee1b6eb64d3c3a446e Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Thu, 18 Apr 2024 16:10:59 +0800
+Subject: [PATCH] [RM#131350][FW Update] Force BMC firmware update
+
+Tag#: 03.54.23.0009
+Issue#: IB21780036
+Severity: Normal
+Category: Bootloader
+Symptom: N/A
+RootCause: N/A
+Description: Force BMC firmware update
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: IB19670000
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ image_manager.cpp | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/image_manager.cpp b/image_manager.cpp
+index a8f8210..597f153 100644
+--- a/image_manager.cpp
++++ b/image_manager.cpp
+@@ -20,6 +20,7 @@
+ #include <cstring>
+ #include <filesystem>
+ #include <string>
++#include <time.h>
+ 
+ namespace phosphor
+ {
+@@ -186,7 +187,8 @@ int Manager::processImage(const std::string& tarFilePath)
+ 
+     // Compute id
+     auto id = Version::getId(version);
+-
++    srand(time(NULL));
++    id = id + "_" + std::to_string(rand());
+     fs::path imageDirPath = std::string{IMG_UPLOAD_DIR};
+     imageDirPath /= id;
+ 
+-- 
+2.17.1
+

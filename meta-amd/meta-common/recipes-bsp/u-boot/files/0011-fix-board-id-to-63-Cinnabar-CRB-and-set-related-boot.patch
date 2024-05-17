@@ -1,0 +1,39 @@
+From d762d890286f2484d6a45c5db0ce9162b63fbbf7 Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Fri, 1 Mar 2024 10:49:12 +0800
+Subject: [PATCH 3/3] fix board id to 63 (Cinnabar CRB) and set related
+ bootlader env
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ common/main.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/common/main.c b/common/main.c
+index 8298e8486e..e8f10c66fa 100644
+--- a/common/main.c
++++ b/common/main.c
+@@ -157,6 +157,9 @@ void set_hostname()
+ 					sprintf(hostname, "hawaii-%02x%02x", octate_5, octate_6);
+ 					break;
+ 			}
++			sprintf(hostname, "cinnabar-%02x%02x", octate_5, octate_6);
++			dimm_per_bus = THREE_DIMM_PER_BUS;
++			dimm_per_ch  = TWO_DIMM_PER_CH;
+ 
+ 			/* Append bootargs with hostname */
+ 			sprintf(new_bootargs, "%s systemd.hostname=%s", cur_bootargs, hostname);
+@@ -268,7 +271,9 @@ void main_loop(void)
+ 	env_save();
+ 
+ 	/* Read board id from eerpom and set env */
+-	set_board_id();
++	//set_board_id();
++	env_set("board_id", "63");
++	env_save();
+ 	set_hostname();
+ 	s = bootdelay_process();
+ 	if (cli_process_fdt(&s))
+-- 
+2.17.1
+

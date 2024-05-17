@@ -1,0 +1,409 @@
+From dfeec1393941bd871b391cc9200272b72747cd4b Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Wed, 6 Mar 2024 14:14:23 +0800
+Subject: [PATCH] [RM#127288][kernel] enable I2C in kernel dts
+
+Tag#: 03.54.23.0009
+Issue#: IB21780024
+Severity: Normal
+Category: Kernel
+Symptom: N/A
+RootCause: N/A
+Description: enable I2C in kernel dts
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: IB19670000
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 343 ++----------------
+ 1 file changed, 22 insertions(+), 321 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index fdeb4016df72..3dbfd1f9d64d 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -65,17 +65,7 @@
+ 		};
+ 	};
+ 
+-	iio-hwmon-adc121c {
+-		compatible = "iio-hwmon";
+-		oemname0 = "ADC121C_50";
+-		oemname1 = "ADC121C_51";
+-		oemname2 = "ADC121C_52";
+-		oemname3 = "ADC121C_53";
+-		oemname4 = "ADC121C_54";
+-		oemname5 = "ADC121C_55";
+-		io-channels = <&adc0 0>, <&adc1 0>, <&adc2 0>,
+-				<&adc3 0>, <&adc4 0>, <&adc5 0>;
+-	};
++
+ };
+ 
+ &mctp0 {
+@@ -167,340 +157,51 @@
+ 	status = "okay";
+ };
+ 
++
+ // I2C configs
+ &i2c0 {
+-	//Net name i2c9 (SCM_I2C9)- MB FPGA slave
+-	status = "disabled";
++	status = "okay";
+ };
+ 
+ &i2c1 {
+-	//Net name i2c12 (SCM_I2C12) - LCD at 50KHz
+-	status = "disabled";
+-#ifdef OPENBMC_LCD_DRIVER
+-	i2cswitch@70 {
+-		compatible = "nxp,pca9546";
+-		reg = <0x70>;
+-		//<TBD> Define LCD details here
+-	};
+-#endif //OPENBMC_LCD_DRIVER
++	status = "okay";
++};
++&i2c2 {
++	status = "okay";
++};
++&i2c3 {
++	status = "okay";
+ };
+-
+-// Misc Regulators
+ &i2c4 {
+-	// Net name i2c1
+-	status = "disabled";
+-	vdd33run@13 {
+-		//VDD_33_RUN VRM
+-		compatible = "infineon,xdpe12284";
+-		reg = <0x13>;
+-	};
+-	vdd33dual@14 {
+-		//VDD_33_DUAL VRM
+-		compatible = "infineon,xdpe12284";
+-		reg = <0x14>;
+-	};
+-	vdd5dual@15 {
+-		//VDD_5_DUAL VRM
+-		compatible = "infineon,xdpe12284";
+-		reg = <0x15>;
+-	};
++	status = "okay";
+ };
+-
+-// P0 VRs
+ &i2c5 {
+-	// Net name i2c2 (SCM_I2C2)
+-	status = "disabled";
+-	i2cswitch@71 {
+-		compatible = "nxp,pca9546";
+-		reg = <0x71>;
+-		#address-cells = <1>;
+-		#size-cells = <0>;
+-
+-		i2c@0 {
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-			reg = <0>;
+-
+-			p0_vdd_soc_run@61 {
+-				//VDD SOC RUN
+-				compatible = "isil,isl68137";
+-				reg = <0x61>;
+-			};
+-
+-			p0_vdd_11_sus@62 {
+-				//VDD 11 SUS
+-				compatible = "isil,isl68137";
+-				reg = <0x62>;
+-			};
+-
+-			p0_vdd_vddio_run@63 {
+-				//VDD VDDIO RUN
+-				compatible = "isil,isl68137";
+-				reg = <0x63>;
+-			};
+-
+-			p0_vdd_18_dual@64 {
+-				//VDD 18 DUAL
+-				compatible = "isil,isl68137";
+-				reg = <0x64>;
+-			};
+-
+-			p0_vdd_33_dual@65 {
+-				//VDD 33 DUAL VRM
+-				compatible = "isil,isl68137";
+-				reg = <0x65>;
+-			};
+-		};
+-	};
++	status = "okay";
+ };
+-
+-// Unused
+ &i2c6 {
+-	// Net name i2c3 (SCM_I2C3)
+-	status = "disabled";
++	status = "okay";
+ };
+-
+-// HPM Board ID
+ &i2c7 {
+-	// Net name i2c4 (SCM_I2C4)
+-	status = "disabled";
+-
+-	mbeeprom@50 {
+-		compatible = "microchip,24lc256","atmel,24c256";
+-		reg = <0x50>;
+-	};
++	status = "okay";
+ };
+-
+-// PSUs
+ &i2c8 {
+-	// Net name i2c5 (SCM_I2C5)
+-	status = "disabled";
+-	psueeprom@57 {
+-		compatible = "microchip,24lc256","atmel,24c256";
+-		reg = <0x57>;
+-	};
++	status = "okay";
+ };
+-
+-// Fan, Temp, ADC sensors
+ &i2c9 {
+-	// Net name i2c6 (SCM_I2C6)
+-	status = "disabled";
+-
+-	i2cswitch@70 {
+-		compatible = "nxp,pca9548";
+-		reg = <0x70>;
+-		#address-cells = <1>;
+-		#size-cells = <0>;
+-
+-		i2c@0 {
+-			reg = <0>;
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-
+-			emc2305_1_ap@4d {
+-				compatible = "smsc,emc2305";
+-				reg = <0x4d>;
+-				#cooling-cells = <0x02>;
+-
+-				fan@0 {
+-					min-rpm = /bits/ 16 <1000>;
+-					max-rpm = /bits/ 16 <16000>;
+-				};
+-				fan@1 {
+-					min-rpm = /bits/ 16 <1000>;
+-					max-rpm = /bits/ 16 <16000>;
+-				};
+-
+-				fan@2 {
+-					min-rpm = /bits/ 16 <1000>;
+-					max-rpm = /bits/ 16 <16000>;
+-				};
+-
+-				fan@3 {
+-					min-rpm = /bits/ 16 <1000>;
+-					max-rpm = /bits/ 16 <16000>;
+-				};
+-
+-			};
+-		};
+-		i2c@3 {
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-			reg = <3>;
+-
+-			lm75a@48 {	// FAN FP
+-				compatible = "national,lm75a";
+-				reg = <0x48>;
+-			};
+-		};
+-
+-		i2c@5 {
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-			reg = <5>;
+-
+-			lm75a@48 {	// PWR_CONN
+-				compatible = "national,lm75a";
+-				reg = <0x48>;
+-			};
+-
+-			lm75a@49 {	// SOUTH VR
+-				compatible = "national,lm75a";
+-				reg = <0x49>;
+-			};
+-
+-			lm75a@4a {	// WEST DIMM
+-				compatible = "national,lm75a";
+-				reg = <0x4a>;
+-			};
+-
+-			lm75a@4b {	// EAST M.2
+-				compatible = "national,lm75a";
+-				reg = <0x4b>;
+-			};
+-
+-			lm75a@4c {	// VDD_RUN
+-				compatible = "national,lm75a";
+-				reg = <0x4c>;
+-			};
+-
+-			lm75a@4d {	// WEST M.2
+-				compatible = "national,lm75a";
+-				reg = <0x4d>;
+-			};
+-
+-			lm75a@4e {	// VDD_DUAL
+-				compatible = "national,lm75a";
+-				reg = <0x4e>;
+-			};
+-
+-			lm75a@4f {	// CHASSIS FAN
+-				compatible = "national,lm75a";
+-				reg = <0x4f>;
+-			};
+-		};
+-
+-		i2c@6 {
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-			reg = <6>;
+-
+-			adc0: adc121c_50@50 {
+-				compatible = "ti,adc121c";
+-				reg = <0x50>;
+-				#io-channel-cells = <1>;
+-				label = "adc121c_50";
+-			};
+-			adc1: adc121c_51@51 {
+-				compatible = "ti,adc121c";
+-				reg = <0x51>;
+-				#io-channel-cells = <1>;
+-				label = "adc121c_51";
+-			};
+-			adc2: adc121c_52@52 {
+-				compatible = "ti,adc121c";
+-				reg = <0x52>;
+-				#io-channel-cells = <1>;
+-				label = "adc121c_52";
+-			};
+-			adc3: adc121c_53@53 {
+-				compatible = "ti,adc121c";
+-				reg = <0x53>;
+-				#io-channel-cells = <1>;
+-				label = "adc121c_53@53";
+-			};
+-			adc4: adc121c_54@54 {
+-				compatible = "ti,adc121c";
+-				reg = <0x54>;
+-				#io-channel-cells = <1>;
+-				label = "adc121c_54";
+-			};
+-			adc5: adc121c_55@55 {
+-				compatible = "ti,adc121c";
+-				reg = <0x55>;
+-				#io-channel-cells = <1>;
+-				label = "adc121c_55";
+-			};
+-		};
+-		i2c@7 {
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-			reg = <7>;
+-			// SOC Thermal Diode
+-		};
+-	};
+-};
+-
+-&i2c10 {
+-	// Net name i2c7 (SCM_I2C7)
+-	status = "disabled";
+-
+-#ifdef EEPROM_PROG_ENABLE
+-	i2cswitch@70 {
+-		compatible = "nxp,pca9548";
+-		reg = <0x70>;
+-		#address-cells = <1>;
+-		#size-cells = <0>;
+-
+-	};
+-
+-	i2cswitch@71 {
+-		compatible = "nxp,pca9546";
+-		reg = <0x71>;
+-		#address-cells = <1>;
+-		#size-cells = <0>;
+-
+-		i2c@0 {
+-			#address-cells = <1>;
+-			#size-cells = <0>;
+-			reg = <0>;
+-
+-			brdreveeprom@50 {
+-				//P0 Cinnabar BRD ID
+-				compatible = "microchip,24lc256","atmel,24c256";
+-				reg = <0x50>;
+-			};
+-
+-			scmbrdeeprom@51 {
+-				//P0 SCM BRD ID
+-				compatible = "microchip,24lc256","atmel,24c256";
+-				reg = <0x51>;
+-			};
+-		};
+-
+-	i2cswitch@72 {
+-		compatible = "nxp,pca9546";
+-		reg = <0x72>;
+-		#address-cells = <1>;
+-		#size-cells = <0>;
+-		// PCIe Slots 1, 3, 4
+-	};
+-#endif
++	status = "okay";
+ };
+-
+ &i2c11 {
+-	// Net name i2c8 (SCM_I2C8) - MB LOM
+-	status = "disabled";
++	status = "okay";
+ };
+-
+ &i2c12 {
+-	// LOCAL MGMT - FPGA slave
+-	status = "disabled";
++	status = "okay";
+ };
+-
+-&i2c14 {
+-	// LOCAL MGMT - EEPROM, RTC
+-	status = "disabled";
+-	bmceeprom@50 {
+-	compatible = "microchip,24lc512","atmel,24c512";
+-	reg = <0x50>;
+-	};
++&i2c13 {
++	status = "okay";
+ };
+ 
+-&i2c15 {
+-	// RoT
+-	status = "disabled";
+-};
++
++
+ 
+ // i3c
+ 
+-- 
+2.17.1
+

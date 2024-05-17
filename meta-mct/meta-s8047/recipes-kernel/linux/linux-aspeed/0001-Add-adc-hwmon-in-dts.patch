@@ -1,0 +1,54 @@
+From eefb83a7d562c544e813b0f5fc4fc43706c52670 Mon Sep 17 00:00:00 2001
+From: Lloyd <lloyd.lin@insyde.com>
+Date: Mon, 1 Apr 2024 14:21:16 +0800
+Subject: [PATCH] Add adc hwmon in dts
+
+Signed-off-by: Lloyd <lloyd.lin@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 29 +++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index c174ca623043..33f1ea826998 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -53,7 +53,36 @@
+ 		};
+ 	};
+ 
++    adc0: adc@1e6e9000 {
++        compatible = "aspeed,ast2600-adc0";
++        reg = <0x1e6e9000 0x100>;
++        clocks = <&syscon ASPEED_CLK_APB2>;
++        resets = <&syscon ASPEED_RESET_ADC>;
++        interrupts = <GIC_SPI 46 IRQ_TYPE_LEVEL_HIGH>;
++        #io-channel-cells = <1>;
++        aspeed,int-vref-microvolt = <1800000>;
++        aspeed,battery-sensing;
++        status = "okay";
++    };
++
++    adc1: adc@1e6e9100 {
++        compatible = "aspeed,ast2600-adc1";
++        reg = <0x1e6e9100 0x100>;
++        clocks = <&syscon ASPEED_CLK_APB2>;
++        resets = <&syscon ASPEED_RESET_ADC>;
++        interrupts = <GIC_SPI 46 IRQ_TYPE_LEVEL_HIGH>;
++        #io-channel-cells = <1>;
++        aspeed,int-vref-microvolt = <1800000>;
++        status = "okay";
++    };
+ 
++    iio-hwmon {
++        compatible = "iio-hwmon";
++        io-channels = <&adc0 0>, <&adc0 1>, <&adc0 2>, <&adc0 3>,
++            <&adc0 4>, <&adc0 5>, <&adc0 6>, <&adc0 7>,
++            <&adc1 0>, <&adc1 1>, <&adc1 2>, <&adc1 3>,
++            <&adc1 4>, <&adc1 5>, <&adc1 6>, <&adc1 7>;
++    };
+ };
+ 
+ &mctp0 {
+-- 
+2.17.1
+
