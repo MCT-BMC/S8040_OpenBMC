@@ -17,5 +17,6 @@ FILESEXTRAPATHS_prepend := "${THISDIR}/${PN}:"
 SRC_URI += "file://0001-script-changes-for-mako-templates-and-platforms.patch \
             file://0002-platformization-changes-for-sp6-platforms.patch \
             file://0003-Merge-shale64-and-shale96-platforms.patch \
+            file://0004-RM-132917-IPMI-CMD-phase-1-implement-the-response-of-get-device-id-and-BMC-self-test-the-same-as-AMI-via-hard-code.patch \
             "
 

@@ -91,6 +91,16 @@
   sensorID: 0x2F
   sensorType: 1
   offset: 0xff
+/xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T:
+  eventReadingType: 1
+  sensorID: 0xB0
+  sensorType: 1
+  offset: 0xff
+/xyz/openbmc_project/sensors/temperature/M2_NVMe_2_T:
+  eventReadingType: 1
+  sensorID: 0xB1
+  sensorType: 1
+  offset: 0xff
 /xyz/openbmc_project/sensors/voltage/CPU_CORE0:
   eventReadingType: 1
   sensorID: 0xD0

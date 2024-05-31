@@ -90,4 +90,7 @@ SRC_URI += "file://amd-bmc-baseline.cfg \
             file://0088-RM-130416-kernel-configuration-MP2856-pmbus-temp-sensor-in-dts.patch \
             file://0089-RM-130527-Sensor-Porting-APML-temp-sensors.patch \
             file://0090-RM-131535-kernel-Add-heartbeat-feature-in-dts.patch \
-           "
+            file://0091-RM-130528-kernel-Porting-M.2-temp-sensors.patch \
+            file://0092-RM-132911-IPMI-KCS-Enable-KCS-channel-with-lpc-io-reg-0xCA8.patch \
+            file://0093-RM-132276-FRU-Add-EEPROM-config-in-dts.patch \
+           " 

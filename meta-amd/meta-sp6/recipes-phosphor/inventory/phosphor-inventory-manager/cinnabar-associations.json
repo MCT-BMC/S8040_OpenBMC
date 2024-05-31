@@ -27,6 +27,8 @@
                     "/xyz/openbmc_project/sensors/temperature/P0_CHF_DIM1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM0_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM1_T",
+		    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T",
+                    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_2_T",
 
                     "/xyz/openbmc_project/sensors/voltage/CPU_CORE0",
                     "/xyz/openbmc_project/sensors/voltage/CPU_VDDIO",
@@ -81,6 +83,8 @@
                     "/xyz/openbmc_project/sensors/temperature/P0_CHF_DIM1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM0_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM1_T",
+		    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T",
+                    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_2_T",
 
                     "/xyz/openbmc_project/sensors/voltage/CPU_CORE0",
                     "/xyz/openbmc_project/sensors/voltage/CPU_VDDIO",

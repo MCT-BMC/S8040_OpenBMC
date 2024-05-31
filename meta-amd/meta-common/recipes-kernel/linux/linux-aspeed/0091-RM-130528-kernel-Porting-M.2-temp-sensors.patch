@@ -1,0 +1,128 @@
+From d4059ef1412667dc20b1896176e69c8ac9a6d902 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Tue, 14 May 2024 15:03:10 +0800
+Subject: [PATCH] [RM#130528][kernel] Porting M.2 temp sensors.
+
+Tag#: 03.54.23.0063
+Issue#: IB22130016
+Severity: Normal
+Category: kernel
+Symptom: N/A
+RootCause: N/A
+Description: As title
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 24 +++++++++++++++++
+ drivers/hwmon/lm75.c                          | 27 ++++++++++++++++---
+ 2 files changed, 48 insertions(+), 3 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 6edb8fd2f138..dd3e9e65dcf6 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -325,6 +325,30 @@ sbrmi@3c {
+ };
+ &i2c6 {
+ 	status = "okay";
++        i2cswitch@71 {
++                compatible = "nxp,pca9548";
++                reg = <0x71>;
++                #address-cells = <1>;
++                #size-cells = <0>;
++                i2c@3 {
++                        #address-cells = <1>;
++                        #size-cells = <0>;
++                        reg = <3>;
++                        lm75@6a {
++                                compatible = "ti,tmp75nvme";
++                                reg = <0x6a>;
++                        };
++                };
++                i2c@4 {
++                        #address-cells = <1>;
++                        #size-cells = <0>;
++                        reg = <4>;
++                        lm75@6a {
++                                compatible = "ti,tmp75nvme";
++                                reg = <0x6a>;
++                        };
++                };
++        };
+ };
+ &i2c7 {
+ 	status = "okay";
+diff --git a/drivers/hwmon/lm75.c b/drivers/hwmon/lm75.c
+index e447febd121a..7e33abcc4d79 100644
+--- a/drivers/hwmon/lm75.c
++++ b/drivers/hwmon/lm75.c
+@@ -50,6 +50,7 @@ enum lm75_type {		/* keep sorted in alphabetical order */
+ 	tmp75,
+ 	tmp75b,
+ 	tmp75c,
++	tmp75nvme,
+ };
+ 
+ /**
+@@ -293,7 +294,16 @@ static const struct lm75_params device_params[] = {
+ 		.clr_mask = 1 << 5,	/*not one-shot mode*/
+ 		.default_resolution = 12,
+ 		.default_sample_time = MSEC_PER_SEC / 12,
+-	}
++	},
++       [tmp75nvme] = {
++                .set_mask = 3 << 5,     /* 12-bit mode */
++                .clr_mask = 1 << 7,     /* not one-shot mode*/
++                .default_resolution = 12,
++                .default_sample_time = 220,
++                .num_sample_times = 4,
++                .sample_times = (unsigned int []){ 28, 55, 110, 220 },
++                .resolutions = (u8 []) {9, 10, 11, 12 },
++        }
+ };
+ 
+ static inline long lm75_reg_to_mc(s16 temp, u8 resolution)
+@@ -342,10 +352,16 @@ static int lm75_read(struct device *dev, enum hwmon_sensor_types type,
+ 	case hwmon_temp:
+ 		switch (attr) {
+ 		case hwmon_temp_input:
+-			reg = LM75_REG_TEMP;
++                        if (data->kind == tmp75nvme)
++                            reg = 0x03;
++                        else
++                            reg = LM75_REG_TEMP;
+ 			break;
+ 		case hwmon_temp_max:
+-			reg = LM75_REG_MAX;
++                        if (data->kind == tmp75nvme)
++                            reg = 0x00;
++                        else
++                            reg = LM75_REG_MAX;
+ 			break;
+ 		case hwmon_temp_max_hyst:
+ 			reg = LM75_REG_HYST;
+@@ -662,6 +678,7 @@ static const struct i2c_device_id lm75_ids[] = {
+ 	{ "tmp75", tmp75, },
+ 	{ "tmp75b", tmp75b, },
+ 	{ "tmp75c", tmp75c, },
++	{ "tmp75nvme", tmp75nvme, },
+ 	{ /* LIST END */ }
+ };
+ MODULE_DEVICE_TABLE(i2c, lm75_ids);
+@@ -771,6 +788,10 @@ static const struct of_device_id __maybe_unused lm75_of_match[] = {
+ 		.compatible = "ti,tmp75c",
+ 		.data = (void *)tmp75c
+ 	},
++        {
++                .compatible = "ti,tmp75nvme",
++                .data = (void *)tmp75nvme
++        },
+ 	{ },
+ };
+ MODULE_DEVICE_TABLE(of, lm75_of_match);
+-- 
+2.43.2
+

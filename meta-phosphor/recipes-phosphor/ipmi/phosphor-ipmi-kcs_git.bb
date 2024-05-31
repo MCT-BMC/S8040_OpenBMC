@@ -11,8 +11,11 @@ inherit systemd
 PV = "1.0+git${SRCPV}"
 
 KCS_DEVICE ?= "ipmi-kcs3"
+SMM_DEVICE = "ipmi-kcs2"
 
 SYSTEMD_SERVICE_${PN} = "${PN}@${KCS_DEVICE}.service"
+SYSTEMD_SERVICE_${PN}_append = " ${PN}@${SMM_DEVICE}.service "
+
 FILES_${PN} += "${systemd_system_unitdir}/${PN}@.service"
 
 PROVIDES += "virtual/obmc-host-ipmi-hw"

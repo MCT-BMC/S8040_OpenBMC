@@ -305,6 +305,44 @@
         Offsets:
           0xFF:
             type: double
+0xB0:
+  sensorType: 0x01
+  entityID: 0x0B
+  path: /xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T
+  sensorReadingType: 0x01
+  unit: xyz.openbmc_project.Sensor.Value.Unit.DegreesC
+  scale: 0
+  offsetB: 0
+  bExp: 0
+  rExp: 0
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingData
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0xB1:
+  sensorType: 0x01
+  entityID: 0x0B
+  path: /xyz/openbmc_project/sensors/temperature/M2_NVMe_2_T
+  sensorReadingType: 0x01
+  unit: xyz.openbmc_project.Sensor.Value.Unit.DegreesC
+  scale: 0
+  offsetB: 0
+  bExp: 0
+  rExp: 0
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingData
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
 0xD0:
   sensorType: 0x02
   entityID: 0x03

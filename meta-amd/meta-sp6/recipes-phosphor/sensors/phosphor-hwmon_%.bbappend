@@ -1,5 +1,5 @@
 FILESEXTRAPATHS_prepend_sp6 := "${THISDIR}/${PN}:"
-EXTRA_OEMESON_append_sp6 = " -Dupdate-functional-on-fail=true -Dnegative-errno-on-fail=false"
+EXTRA_OEMESON_append_sp6 = " -Dupdate-functional-on-fail=false -Dnegative-errno-on-fail=false"
 
 SRC_URI += "file://0001-Add-power-on-monitor-mechanism.patch \
 	   "
@@ -35,6 +35,8 @@ CHIPS_CINNABAR = " \
         bus@1e78a000/i2c-bus@280/mp2856@63 \
         bus@1e78a000/i2c-bus@300/sbtsi@4c \
         bus@1e78a000/i2c-bus@300/sbrmi@3c \
+        bus@1e78a000/i2c-bus@380/i2cswitch@71/i2c@3/lm75@6a \
+        bus@1e78a000/i2c-bus@380/i2cswitch@71/i2c@4/lm75@6a \
         pwm-tacho-controller@1e610000 \
         "
 
