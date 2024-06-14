@@ -1,0 +1,261 @@
+From d258f3949ac6b80442012e07c9c2f129a3bdc4c9 Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Fri, 1 Mar 2024 10:53:53 +0800
+Subject: [PATCH] only enable LAN related dts and necessary configuatrions
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 67 ++++++++++---------
+ 1 file changed, 34 insertions(+), 33 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 7c3f14fae0af..8540db9b29de 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -79,7 +79,7 @@
+ };
+ 
+ &mctp0 {
+-	status	= "okay";
++	status	= "disabled";
+ };
+ 
+ &mdio0 {
+@@ -91,23 +91,24 @@
+ 	};
+ };
+ 
+-&mac2 {
++&mac0 {
+ 	status = "okay";
++	phy-mode = "rgmii-rxid";
++	phy-handle = <&ethphy0>;
++
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_rmii3_default>;
+-	clock-names = "MACCLK", "RCLK";
+-	use-ncsi;
++	pinctrl-0 = <&pinctrl_rgmii1_default>;
+ };
+ 
+ &mac3 {
+ 	status = "okay";
+-	phy-mode = "rgmii";
+-	phy-handle = <&ethphy0>;
+-
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_rgmii4_default>;
++	pinctrl-0 = <&pinctrl_rmii4_default>;
++	use-ncsi;
+ };
+ 
++
++
+ &fmc {
+ 	status = "okay";
+ 	fmc-spi-user-mode;
+@@ -122,7 +123,7 @@
+ };
+ 
+ &spi1 {
+-	status = "okay";
++	status = "disabled";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_spi1_default &pinctrl_qspi1_default>;
+ 	fmc-spi-user-mode;
+@@ -137,7 +138,7 @@
+ };
+ 
+ &spi2 {
+-	status = "okay";
++	status = "disabled";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_spi2_default &pinctrl_qspi2_default>;
+ 	fmc-spi-user-mode;
+@@ -146,7 +147,7 @@
+ 	flash@0 {
+ 		compatible = "jedec,spi-nor";
+ 		label = "pnor";
+-		status = "okay";
++		status = "disabled";
+ 	};
+ 
+ };
+@@ -169,12 +170,12 @@
+ // I2C configs
+ &i2c0 {
+ 	//Net name i2c9 (SCM_I2C9)- MB FPGA slave
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &i2c1 {
+ 	//Net name i2c12 (SCM_I2C12) - LCD at 50KHz
+-	status = "okay";
++	status = "disabled";
+ #ifdef OPENBMC_LCD_DRIVER
+ 	i2cswitch@70 {
+ 		compatible = "nxp,pca9546";
+@@ -187,7 +188,7 @@
+ // Misc Regulators
+ &i2c4 {
+ 	// Net name i2c1
+-	status = "okay";
++	status = "disabled";
+ 	vdd33run@13 {
+ 		//VDD_33_RUN VRM
+ 		compatible = "infineon,xdpe12284";
+@@ -208,7 +209,7 @@
+ // P0 VRs
+ &i2c5 {
+ 	// Net name i2c2 (SCM_I2C2)
+-	status = "okay";
++	status = "disabled";
+ 	i2cswitch@71 {
+ 		compatible = "nxp,pca9546";
+ 		reg = <0x71>;
+@@ -256,13 +257,13 @@
+ // Unused
+ &i2c6 {
+ 	// Net name i2c3 (SCM_I2C3)
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ // HPM Board ID
+ &i2c7 {
+ 	// Net name i2c4 (SCM_I2C4)
+-	status = "okay";
++	status = "disabled";
+ 
+ 	mbeeprom@50 {
+ 		compatible = "microchip,24lc256","atmel,24c256";
+@@ -273,7 +274,7 @@
+ // PSUs
+ &i2c8 {
+ 	// Net name i2c5 (SCM_I2C5)
+-	status = "okay";
++	status = "disabled";
+ 	psueeprom@57 {
+ 		compatible = "microchip,24lc256","atmel,24c256";
+ 		reg = <0x57>;
+@@ -283,7 +284,7 @@
+ // Fan, Temp, ADC sensors
+ &i2c9 {
+ 	// Net name i2c6 (SCM_I2C6)
+-	status = "okay";
++	status = "disabled";
+ 
+ 	i2cswitch@70 {
+ 		compatible = "nxp,pca9548";
+@@ -432,7 +433,7 @@
+ 
+ &i2c10 {
+ 	// Net name i2c7 (SCM_I2C7)
+-	status = "okay";
++	status = "disabled";
+ 
+ #ifdef EEPROM_PROG_ENABLE
+ 	i2cswitch@70 {
+@@ -479,17 +480,17 @@
+ 
+ &i2c11 {
+ 	// Net name i2c8 (SCM_I2C8) - MB LOM
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &i2c12 {
+ 	// LOCAL MGMT - FPGA slave
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &i2c14 {
+ 	// LOCAL MGMT - EEPROM, RTC
+-	status = "okay";
++	status = "disabled";
+ 	bmceeprom@50 {
+ 	compatible = "microchip,24lc512","atmel,24c512";
+ 	reg = <0x50>;
+@@ -498,14 +499,14 @@
+ 
+ &i2c15 {
+ 	// RoT
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ // i3c
+ 
+ &i3c0 {
+ 	// P0 DIMM A0, B0, D0 SPD Access
+-	status = "okay";
++	status = "disabled";
+ 
+ 	jdec-spd;
+ 	bus_id = <0x00>;
+@@ -553,7 +554,7 @@
+ 
+ &i3c1 {
+ 	// P0 DIMM E0, F0, H0 SPD Access
+-	status = "okay";
++	status = "disabled";
+ 
+ 	jdec-spd;
+ 	bus_id = <0x01>;
+@@ -601,7 +602,7 @@
+ 
+ &i3c2 {
+ 	// P0 DIMM A1, B1, D1 SPD Access
+-	status = "okay";
++	status = "disabled";
+ 
+ 	jdec-spd;
+ 	bus_id = <0x02>;
+@@ -649,7 +650,7 @@
+ 
+ &i3c3 {
+ 	// P0 DIMM E1, F1, H1 SPD Access
+-	status = "okay";
++	status = "disabled";
+ 
+ 	jdec-spd;
+ 	bus_id = <0x03>;
+@@ -698,7 +699,7 @@
+ #ifdef ENABLE_I2C_APML
+ &i2c2 {
+ 	// P0 APML - i2c10
+-	status = "okay";
++	status = "disabled";
+ 	bus-frequency = <400000>;
+ 
+ 	sbtsi@4c {
+@@ -716,13 +717,13 @@
+ 
+ &i2c3 {
+ 	// NC
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ #else
+ &i3c4 {
+ 	// P0 APML
+-	status = "okay";
++	status = "disabled";
+ 
+ 	jdec-spd;
+ 	set_dasa;
+@@ -797,7 +798,7 @@
+ };
+ 
+ &jtag1 {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &video {
+-- 
+2.17.1
+

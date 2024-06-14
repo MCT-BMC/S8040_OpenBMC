@@ -1,0 +1,47 @@
+From deed2a901cfde52ca2ec7675f748a2b1634afd6e Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Fri, 3 May 2024 11:45:18 +0800
+Subject: [PATCH] [RM#131535][kernel] Add heartbeat feature in dts.
+
+Tag#: 03.54.23.0063
+Issue#: IB22130014
+Severity: Normal
+Category: kernel
+Symptom: N/A
+RootCause: N/A
+Description: As title
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 5b9f15551eea..73c18777c54e 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -23,6 +23,18 @@ chosen {
+ 		bootargs = "console=ttyS4,115200 earlycon vmalloc=512MB";
+ 	};
+ 
++        leds {
++                compatible = "gpio-leds";
++
++                heartbeat {
++                        gpios = <&gpio0 ASPEED_GPIO(P, 7) GPIO_ACTIVE_LOW>;
++                        linux,default-trigger = "timer";
++                        default-state = "on";
++                        active-delay = <250>;
++                        inactive-delay = <250>;
++                };
++        };
++
+ 	memory@80000000 {
+ 		device_type = "memory";
+ 		reg = <0x80000000 0x80000000>;
+-- 
+2.43.2
+

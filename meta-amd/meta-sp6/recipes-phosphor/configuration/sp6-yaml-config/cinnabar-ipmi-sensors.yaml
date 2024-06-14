@@ -762,3 +762,353 @@
         Offsets:
           0xFF:
             type: double
+0xa0:
+  sensorType: 0x23
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/IPMI_Watchdog
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x40:
+  sensorType: 0x05
+  entityID: 0x17
+  path: /xyz/openbmc_project/sensors/status/Chassis_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x83:
+  sensorType: 0x22
+  entityID: 0x09
+  path: /xyz/openbmc_project/sensors/status/ACPI_Pwr_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0xa1:
+  sensorType: 0x10
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/SEL_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0xa2:
+  sensorType: 0x12
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/System_Event
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x87:
+  sensorType: 0x2b
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/Firmware_Change
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x86:
+  sensorType: 0x28
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/Firmware_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x98:
+  sensorType: 0x14
+  entityID: 0x0C
+  path: /xyz/openbmc_project/sensors/status/Button_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x99:
+  sensorType: 0x14
+  entityID: 0x0C
+  path: /xyz/openbmc_project/sensors/status/NMI_BTN_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x30:
+  sensorType: 0x7
+  entityID: 0x03
+  path: /xyz/openbmc_project/sensors/status/CPU0_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x89:
+  sensorType: 0x2c
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/IPMI_Pwr_Off
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x8a:
+  sensorType: 0x2c
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/IPMI_Pwr_On
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x8b:
+  sensorType: 0x2c
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x8c:
+  sensorType: 0x2c
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/IPMI_Pwr_Reset
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x8d:
+  sensorType: 0x2c
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x8e:
+  sensorType: 0x2c
+  entityID: 0x06
+  path: /xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x90:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHA_DIM1_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x91:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHB_DIM1_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x92:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHD_DIM0_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x93:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHD_DIM1_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x94:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHE_DIM1_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x95:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHF_DIM1_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x96:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHH_DIM0_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x97:
+  sensorType: 0xc
+  entityID: 0x08
+  path: /xyz/openbmc_project/sensors/status/P0_CHH_DIM1_S
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double
+0x88:
+  sensorType: 0x9
+  entityID: 0x13
+  path: /xyz/openbmc_project/sensors/status/PWR_Unit_Status
+  sensorReadingType: 0x6f
+  mutability: Mutability::Write | Mutability::Read
+  serviceInterface: org.freedesktop.DBus.Properties
+  readingType: readingAssertion
+  interfaces:
+    xyz.openbmc_project.Sensor.Value:
+      Value:
+        Offsets:
+          0xFF:
+            type: double

@@ -1,0 +1,42 @@
+From 309e7fec97becd1d2f169239a7692167f378d051 Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Thu, 16 May 2024 15:26:19 +0800
+Subject: [PATCH] [RM#132911][IPMI][KCS] Enable KCS channel with lpc-io-reg
+ 0xCA8
+
+Tag#: 03.54.23.0009
+Issue#: IB21780036
+Severity: Normal
+Category: IPMI
+Symptom: N/A
+RootCause: N/A
+Description: Enable KCS channel with lpc-io-reg 0xCA8
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: IB19670000
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index dd3e9e65dcf6..b97e8b92e73c 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -701,6 +701,12 @@
+ 	status = "okay";
+ };
+ 
++
++&kcs2 {
++	status = "okay";
++	aspeed,lpc-io-reg = <0xCA8>;
++};
++
+ &kcs3 {
+ 	status = "okay";
+ 	aspeed,lpc-io-reg = <0xCA2>;
+-- 
+2.17.1
+

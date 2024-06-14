@@ -11,7 +11,7 @@
                 },
                 "paths":
                 [
-		    "/xyz/openbmc_project/sensors/temperature/P0_Temp_T",
+                    "/xyz/openbmc_project/sensors/temperature/P0_Temp_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_MOSFET_1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_MOSFET_2_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_MOSFET_3_T",
@@ -27,9 +27,8 @@
                     "/xyz/openbmc_project/sensors/temperature/P0_CHF_DIM1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM0_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM1_T",
-		    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T",
+                    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T",
                     "/xyz/openbmc_project/sensors/temperature/M2_NVMe_2_T",
-
                     "/xyz/openbmc_project/sensors/voltage/CPU_CORE0",
                     "/xyz/openbmc_project/sensors/voltage/CPU_VDDIO",
                     "/xyz/openbmc_project/sensors/voltage/CPU_SOC",
@@ -44,13 +43,35 @@
                     "/xyz/openbmc_project/sensors/voltage/VDD_33_DUAL",
                     "/xyz/openbmc_project/sensors/voltage/CPU_18_DUAL",
                     "/xyz/openbmc_project/sensors/voltage/USB_1V2_HUB",
-
                     "/xyz/openbmc_project/sensors/fan_tach/CPU0_FAN",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_1",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_2",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_3",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_4",
-                    "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_5"
+                    "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_5",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Watchdog",
+                    "/xyz/openbmc_project/sensors/status/Chassis_Status",
+                    "/xyz/openbmc_project/sensors/status/ACPI_Pwr_Status",
+                    "/xyz/openbmc_project/sensors/status/SEL_Status",
+                    "/xyz/openbmc_project/sensors/status/Firmware_Change",
+                    "/xyz/openbmc_project/sensors/status/Button_Status",
+                    "/xyz/openbmc_project/sensors/status/NMI_BTN_Status",
+                    "/xyz/openbmc_project/sensors/status/CPU0_Status",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Off",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_On",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Reset",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag",
+                    "/xyz/openbmc_project/sensors/status/P0_CHA_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHB_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHD_DIM0_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHD_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHE_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHF_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHH_DIM0_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHH_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/PWR_Unit_Status"
                 ]
             }
         ]
@@ -67,7 +88,7 @@
                 },
                 "paths":
                 [
-		    "/xyz/openbmc_project/sensors/temperature/P0_Temp_T",
+                    "/xyz/openbmc_project/sensors/temperature/P0_Temp_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_MOSFET_1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_MOSFET_2_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_MOSFET_3_T",
@@ -75,7 +96,7 @@
                     "/xyz/openbmc_project/sensors/temperature/MB_Air_Inlet_T",
                     "/xyz/openbmc_project/sensors/temperature/SYS_Air_Outlet_T",
                     "/xyz/openbmc_project/sensors/temperature/LAN_X710_Area_T",
-		    "/xyz/openbmc_project/sensors/temperature/P0_CHA_DIM1_T",
+                    "/xyz/openbmc_project/sensors/temperature/P0_CHA_DIM1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHB_DIM1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHD_DIM0_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHD_DIM1_T",
@@ -83,9 +104,8 @@
                     "/xyz/openbmc_project/sensors/temperature/P0_CHF_DIM1_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM0_T",
                     "/xyz/openbmc_project/sensors/temperature/P0_CHH_DIM1_T",
-		    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T",
+                    "/xyz/openbmc_project/sensors/temperature/M2_NVMe_1_T",
                     "/xyz/openbmc_project/sensors/temperature/M2_NVMe_2_T",
-
                     "/xyz/openbmc_project/sensors/voltage/CPU_CORE0",
                     "/xyz/openbmc_project/sensors/voltage/CPU_VDDIO",
                     "/xyz/openbmc_project/sensors/voltage/CPU_SOC",
@@ -100,13 +120,35 @@
                     "/xyz/openbmc_project/sensors/voltage/VDD_33_DUAL",
                     "/xyz/openbmc_project/sensors/voltage/CPU_18_DUAL",
                     "/xyz/openbmc_project/sensors/voltage/USB_1V2_HUB",
-
                     "/xyz/openbmc_project/sensors/fan_tach/CPU0_FAN",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_1",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_2",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_3",
                     "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_4",
-                    "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_5"
+                    "/xyz/openbmc_project/sensors/fan_tach/SYS_FAN_5",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Watchdog",
+                    "/xyz/openbmc_project/sensors/status/Chassis_Status",
+                    "/xyz/openbmc_project/sensors/status/ACPI_Power_Status",
+                    "/xyz/openbmc_project/sensors/status/SEL_Status",
+                    "/xyz/openbmc_project/sensors/status/Firmware_Change",
+                    "/xyz/openbmc_project/sensors/status/Button_Status",
+                    "/xyz/openbmc_project/sensors/status/NMI_BTN_Status",
+                    "/xyz/openbmc_project/sensors/status/CPU0_Status",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Off",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_On",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Reset",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft",
+                    "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag",
+                    "/xyz/openbmc_project/sensors/status/P0_CHA_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHB_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHD_DIM0_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHD_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHE_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHF_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHH_DIM0_S",
+                    "/xyz/openbmc_project/sensors/status/P0_CHH_DIM1_S",
+                    "/xyz/openbmc_project/sensors/status/PWR_Unit_Status"
                 ]
             }
         ]

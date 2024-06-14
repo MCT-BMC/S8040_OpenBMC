@@ -15,7 +15,8 @@ def get_service(d):
 
 SYSTEMD_SERVICE_${PN} = "${@get_service(d)}"
 #SRC_URI = "git://git@github.com:/AMDESE/amd-bmc-ras.git;branch=main;protocol=ssh"
-SRC_URI = "git://git@github.com:/AMDESE/amd-bmc-ras.git;branch=main;protocol=https"
+#SRC_URI = "git://git@github.com:/AMDESE/amd-bmc-ras.git;branch=main;protocol=https"
+SRC_URI = "git://git@micgitlab1.mic.com.tw/grdc/rdc5/rdd2/bmc/openbmc/amd/amd-bmc-ras.git;branch=master;protocol=https"
 SRCREV = "2ef58f0a1411ac188d72f13b047ac9c0a155b086"
 
 S = "${WORKDIR}/git"

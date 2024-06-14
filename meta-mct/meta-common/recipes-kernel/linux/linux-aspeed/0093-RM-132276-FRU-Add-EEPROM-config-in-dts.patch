@@ -1,0 +1,39 @@
+From 53c6cef2f0430224a342f9723e47af124ef1e335 Mon Sep 17 00:00:00 2001
+From: "Wei Dong" <wei.dong@insyde.com>
+Date: Thu, 16 May 2024 14:11:47 +0800
+Subject: [PATCH] [RM#132276][FRU] Add EEPROM config in dts
+
+Tag#: 13.50.13.0001
+Issue#: IB21640002
+Severity: Normal
+Category: FRU
+Symptom: N/A
+RootCause: N/A
+Description: As title
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: Wei Dong <wei.dong@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 5b9f15551eea..a02f4768ab34 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -225,6 +225,10 @@ &i2c0 {
+ 
+ &i2c1 {
+ 	status = "okay";
++        eeprom@50 {
++                compatible = "microchip,24lc256","atmel,24c256";
++                reg = <0x50>;
++        };
+ };
+ &i2c2 {
+ 	status = "okay";
+-- 
+2.43.2
+

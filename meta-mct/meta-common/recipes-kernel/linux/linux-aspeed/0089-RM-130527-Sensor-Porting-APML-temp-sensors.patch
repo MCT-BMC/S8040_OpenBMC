@@ -1,0 +1,48 @@
+From 4050567a2977786a28ddd6d0992c93a660f49c94 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Wed, 17 Apr 2024 10:07:07 +0800
+Subject: [PATCH] [RM#130527][Sensor] Porting APML temp sensors.
+
+Tag#: 03.54.23.0063
+Issue#: IB22130012
+Severity: Normal
+Category: Sensor
+Symptom: N/A
+RootCause: N/A
+Description: As title
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 6a2632f10534..3aade7e9c6f6 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -296,6 +296,19 @@ channel@0 {
+ };
+ &i2c5 {
+ 	status = "okay";
++        bus-frequency = <400000>;
++
++        sbtsi@4c {
++                compatible = "amd,sbtsi";
++                reg = <0x4c>;
++        };
++
++        sbrmi@3c {
++                compatible = "amd,sbrmi";
++                reg = <0x3c>;
++                dimm-count = <8>;
++                dimm-ids = <0x93 0x94 0x81 0x91 0x99 0x9A 0x87 0x97>;
++        };
+ };
+ &i2c6 {
+ 	status = "okay";
+-- 
+2.43.2
+

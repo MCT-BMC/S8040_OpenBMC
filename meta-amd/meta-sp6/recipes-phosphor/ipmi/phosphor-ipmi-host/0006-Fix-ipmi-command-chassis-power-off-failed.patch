@@ -1,0 +1,231 @@
+From 9c1ddd3328b748dd222a3369897b87343b2d354b Mon Sep 17 00:00:00 2001
+From: "alex.huang" <alex.huang@insyde.com>
+Date: Tue, 21 May 2024 01:05:06 +0800
+Subject: [PATCH] Fix ipmi command chassis power off failed
+
+Tag#: 03.54.23.0063
+Issue#: IB71770004
+Severity: Normal
+Category: IPMI
+Symptom: N/A
+RootCause: N/A
+Description: As title
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: alex.huang <alex.huang@insyde.com>
+
+%% original patch: 0006-Fix-ipmi-command-chassis-power-off-failed.patch
+---
+ chassishandler.cpp | 170 +++++++++++++++++++++++++++++++--------------
+ 1 file changed, 117 insertions(+), 53 deletions(-)
+
+diff --git a/chassishandler.cpp b/chassishandler.cpp
+index b12e1e1..bfdeda6 100644
+--- a/chassishandler.cpp
++++ b/chassishandler.cpp
+@@ -1417,83 +1417,147 @@ void setIpmiPowerstateToDbus(std::string objpath,uint8_t value)
+     }
+ }
+ 
++//------------------------------------------
++// Trigger an NMI on the host via dbus
++//------------------------------------------
++static int doNmi(ipmi::Context::ptr& ctx)
++{
++    constexpr const char* nmiIntfName = "xyz.openbmc_project.Control.Host.NMI";
++    ipmi::DbusObjectInfo nmiObj{};
++    boost::system::error_code ec;
++
++    ec = ipmi::getDbusObject(ctx, nmiIntfName, nmiObj);
++    if (ec)
++    {
++        log<level::ERR>("Failed to find NMI service",
++                        entry("ERROR=%s", ec.message().c_str()));
++        return -1;
++    }
++
++    ctx->bus->yield_method_call<void>(ctx->yield, ec, nmiObj.second,
++                                      nmiObj.first, nmiIntfName, "NMI");
++    if (ec)
++    {
++        log<level::ERR>("NMI call failed",
++                        entry("ERROR=%s", ec.message().c_str()));
++        elog<InternalFailure>();
++        return -1;
++    }
++
++    return 0;
++}
++
++//------------------------------------------
++// Calls into Host State Manager Dbus object
++//------------------------------------------
++int initiateHostStateTransition(ipmi::Context::ptr& ctx, std::string request)
++{
++    // OpenBMC Host State Manager dbus framework
++    constexpr auto hostStatePath = "/xyz/openbmc_project/state/host0";
++    constexpr auto hostStateIntf = "xyz.openbmc_project.State.Host";
++
++    std::string service;
++    boost::system::error_code ec =
++        ipmi::getService(ctx, hostStateIntf, hostStatePath, service);
++
++    if (!ec)
++    {
++        ec = ipmi::setDbusProperty(ctx, service, hostStatePath, hostStateIntf,
++                                   "RequestedHostTransition", request);
++    }
++    if (ec)
++    {
++        log<level::ERR>("Failed to initiate transition",
++                        entry("EXCEPTION=%s, REQUEST=%s", ec.message().c_str(),
++                              request.c_str()));
++        return -1;
++    }
++    log<level::INFO>(
++        "Transition request initiated successfully",
++        entry("USERID=%d, REQUEST=%s", ctx->userId, request.c_str()));
++    return 0;
++}
++
++//------------------------------------------
++// Calls into Chassis State Manager Dbus object
++//------------------------------------------
++int initiateChassisStateTransition(ipmi::Context::ptr& ctx, std::string request)
++{
++    // OpenBMC Chassis State Manager dbus framework
++    constexpr auto chassisStatePath = "/xyz/openbmc_project/state/chassis0";
++    constexpr auto chassisStateIntf = "xyz.openbmc_project.State.Chassis";
++
++    std::string service;
++    boost::system::error_code ec =
++        ipmi::getService(ctx, chassisStateIntf, chassisStatePath, service);
++    if (!ec)
++    {
++        ec = ipmi::setDbusProperty(ctx, service, chassisStatePath,
++                                   chassisStateIntf, "RequestedPowerTransition",
++                                   request);
++    }
++    if (ec)
++    {
++        log<level::ERR>("Failed to initiate transition",
++                        entry("EXCEPTION=%s, REQUEST=%s", ec.message().c_str(),
++                              request.c_str()));
++        return -1;
++    }
++
++    return 0;
++}
++
+ /** @brief Implementation of chassis control command
+  *
+  *  @param - chassisControl command byte
+  *
+  *  @return  Success or InvalidFieldRequest.
+  */
+-ipmi::RspType<> ipmiChassisControl(uint8_t chassisControl)
++ipmi::RspType<> ipmiChassisControl(ipmi::Context::ptr& ctx,
++                                   uint8_t chassisControl)
+ {
+     int rc = 0;
+     switch (chassisControl)
+     {
+         case CMD_POWER_ON:
+-            rc = initiate_state_transition(State::Host::Transition::On);
+-            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_On",2);
++            rc = initiateHostStateTransition(
++                ctx, "xyz.openbmc_project.State.Host.Transition.On");
++            setIpmiPowerstateToDbus(
++                "/xyz/openbmc_project/sensors/status/IPMI_Pwr_On", 2);
+             break;
+         case CMD_POWER_OFF:
+-            // This path would be hit in 2 conditions.
+-            // 1: When user asks for power off using ipmi chassis command 0x04
+-            // 2: Host asking for power off post shutting down.
+-
+-            // If it's a host requested power off, then need to nudge Softoff
+-            // application that it needs to stop the watchdog timer if running.
+-            // If it is a user requested power off, then this is not really
+-            // needed. But then we need to differentiate between user and host
+-            // calling this same command
+-
+-            // For now, we are going ahead with trying to nudge the soft off and
+-            // interpret the failure to do so as a non softoff case
+-            rc = stop_soft_off_timer();
+-
+-            // Only request the Off transition if the soft power off
+-            // application is not running
+-            if (rc < 0)
+-            {
+-                // First create a file to indicate to the soft off application
+-                // that it should not run. Not doing this will result in State
+-                // manager doing a default soft power off when asked for power
+-                // off.
+-                indicate_no_softoff_needed();
+-
+-                // Now request the shutdown
+-                rc = initiate_state_transition(State::Host::Transition::Off);
+-            }
+-            else
+-            {
+-                log<level::INFO>("Soft off is running, so let shutdown target "
+-                                 "stop the host");
+-            }
+-            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Off",5);
++            rc = initiateChassisStateTransition(
++                ctx, "xyz.openbmc_project.State.Chassis.Transition.Off");
++            setIpmiPowerstateToDbus(
++                "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Off", 5);
+             break;
+ 
+         case CMD_HARD_RESET:
++            rc = initiateHostStateTransition(
++                ctx,
++                "xyz.openbmc_project.State.Host.Transition.ForceWarmReboot");
++            setIpmiPowerstateToDbus(
++                "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Reset", 2);
++            break;
+         case CMD_POWER_CYCLE:
+-            // SPEC has a section that says certain implementations can trigger
+-            // PowerOn if power is Off when a command to power cycle is
+-            // requested
+-
+-            // First create a file to indicate to the soft off application
+-            // that it should not run since this is a direct user initiated
+-            // power reboot request (i.e. a reboot request that is not
+-            // originating via a soft power off SMS request)
+-            indicate_no_softoff_needed();
+-
+-            rc = initiate_state_transition(State::Host::Transition::Reboot);
++            rc = initiateHostStateTransition(
++                ctx, "xyz.openbmc_project.State.Host.Transition.Reboot");
+ 
+-            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle",2);
++            setIpmiPowerstateToDbus(
++                "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle", 2);
+             break;
+ 
+         case CMD_SOFT_OFF_VIA_OVER_TEMP:
+-            // Request Host State Manager to do a soft power off
+-            rc = initiate_state_transition(State::Host::Transition::Off);
+-            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft",5);
++            rc = initiateHostStateTransition(
++                ctx, "xyz.openbmc_project.State.Host.HostState.Off");
++            setIpmiPowerstateToDbus(
++                "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft", 5);
+             break;
+ 
+         case CMD_PULSE_DIAGNOSTIC_INTR:
+-            rc = setNmiProperty(true);
+-            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag",2);
++            rc = doNmi(ctx);
++            setIpmiPowerstateToDbus(
++                "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag", 2);
+             break;
+ 
+         default:
+-- 
+2.25.1
+

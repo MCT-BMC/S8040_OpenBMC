@@ -1,0 +1,94 @@
+From d6d2604ff2f8f18a36f0c7809e1dc35a62c44cbd Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Fri, 22 Mar 2024 15:23:04 +0800
+Subject: [PATCH] [RM#129419][ACPI][Bootloader] Enable ACPI and GPIO0123 pass
+ thru in bootloader
+
+Tag#: 03.54.23.0009
+Issue#: IB21780027
+Severity: Normal
+Category: Kernel
+Symptom: N/A
+RootCause: N/A
+Description: Enable ACPI and GPIO0123 pass thru in bootloader
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: IB19670000
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ arch/arm/mach-aspeed/ast2600/board_common.c | 54 +++++++++++++++++++++
+ 1 file changed, 54 insertions(+)
+
+diff --git a/arch/arm/mach-aspeed/ast2600/board_common.c b/arch/arm/mach-aspeed/ast2600/board_common.c
+index 99a9e1273a..85af0479d5 100644
+--- a/arch/arm/mach-aspeed/ast2600/board_common.c
++++ b/arch/arm/mach-aspeed/ast2600/board_common.c
+@@ -14,6 +14,33 @@
+ 
+ DECLARE_GLOBAL_DATA_PTR;
+ 
++
++
++#define AST_SCU_BASE 0x1e6e2000
++#define SCU438	     0x438
++#define SCU418       0x418
++#define SCU4BC       0x4BC
++#define SCU51C       0x51c
++
++
++#define SCU434       0x434
++#define ENABLE_SIOPWRGD_FUNCTION_PIN    (1 << 12)
++
++#define ENABLE_PBI_FUNCTION_PIN                 (1 << 6)
++#define ENABLE_PBO_FUNCTION_PIN                 (1 << 5)
++#define PBI_PBO_FUNCTION_PIN \
++    (ENABLE_PBI_FUNCTION_PIN | ENABLE_PBO_FUNCTION_PIN)
++
++#define ENABLE_ACPI_GPIOZ7              (1 << 10)
++
++#define ENABLE_PASSTHROUGH_P0           (1 << 24)
++#define ENABLE_PASSTHROUGH_P1           (1 << 25)
++#define ENABLE_PASSTHROUGH_P2           (1 << 26)
++#define ENABLE_PASSTHROUGH_P3           (1 << 27)
++#define ENABLE_PASSTHROUGH_P0P1P2P3 \
++        (ENABLE_PASSTHROUGH_P0 | ENABLE_PASSTHROUGH_P1 | ENABLE_PASSTHROUGH_P2 | ENABLE_PASSTHROUGH_P3)
++
++
+ /*
+  * RMII daughtercard workaround
+  */
+@@ -217,3 +244,30 @@ void aspeed_mmc_init(void)
+ 
+ }
+ 
++void Mitac_ACPI_Setting(void)
++{
++    uint32_t value;
++
++    // Enable PBI and PBO function pin
++    value = readl(AST_SCU_BASE | SCU418);
++    value |= PBI_PBO_FUNCTION_PIN;
++    writel(value, AST_SCU_BASE | SCU418);
++
++    // Enable Passthrough function pin
++    value = readl(AST_SCU_BASE | SCU4BC);
++    value |= ENABLE_PASSTHROUGH_P0P1P2P3;
++    writel(value, AST_SCU_BASE | SCU4BC);
++
++    // Enable ACPI_Z7 function pin
++    value = readl(AST_SCU_BASE | SCU51C);
++    value |= ENABLE_ACPI_GPIOZ7 ;
++    writel(value, AST_SCU_BASE | SCU51C);
++}
++
++__weak int last_stage_init(void)
++{
++	printf("\nStart ACPI Config\n");
++	Mitac_ACPI_Setting();
++	printf("End ACPI Config\n");
++	return 0;
++}
+-- 
+2.17.1
+

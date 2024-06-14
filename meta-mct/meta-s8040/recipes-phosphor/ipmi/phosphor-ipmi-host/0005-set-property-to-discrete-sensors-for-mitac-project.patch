@@ -1,0 +1,233 @@
+From a478cadd625262a8347f579a68a13125e5a7de6b Mon Sep 17 00:00:00 2001
+From: ander <ander.shi@insyde.com>
+Date: Tue, 14 May 2024 13:50:44 +0800
+Subject: [PATCH]  set property to discrete sensors for mitac project
+
+---
+ chassishandler.cpp | 56 ++++++++++++++++++++++++++++++++++++++++++++++
+ globalhandler.cpp  | 20 +++++++++++++++++
+ storagehandler.cpp | 33 +++++++++++++++++++--------
+ 3 files changed, 100 insertions(+), 9 deletions(-)
+
+diff --git a/chassishandler.cpp b/chassishandler.cpp
+index 1801c68..b12e1e1 100644
+--- a/chassishandler.cpp
++++ b/chassishandler.cpp
+@@ -1367,6 +1367,56 @@ void indicate_no_softoff_needed()
+     std::ofstream(path.c_str());
+ }
+ 
++
++void addSelLog(std::string path, std::vector<uint8_t> event_data)
++{
++    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
++	auto method = bus.new_method_call("xyz.openbmc_project.Logging.IPMI", "/xyz/openbmc_project/Logging/IPMI", "xyz.openbmc_project.Logging.IPMI", "IpmiSelAdd");
++	method.append(std::string{"SEL Entry"});
++	method.append(path);
++	method.append(event_data, true, uint16_t(0x0020));
++	try
++	{
++		bus.call_noreply(method);
++	}
++	catch (std::exception &e)
++	{
++		std::cerr << e.what() << std::endl;
++        return;
++	}
++}
++void setIpmiPowerstateToDbus(std::string objpath,uint8_t value)
++{
++    sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
++    constexpr auto busName = "xyz.openbmc_project.dissen";
++    constexpr auto sensorintfset = "xyz.openbmc_project.Sensor.Value";
++    std::vector<std::string> c_objpath{"/xyz/openbmc_project/sensors/status/IPMI_Pwr_Off",
++                                        "/xyz/openbmc_project/sensors/status/IPMI_Pwr_On",
++                                        "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle",
++                                        "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Reset",
++                                        "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft",
++                                        "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag"};
++    try
++    {
++        for (unsigned int i=0;i<c_objpath.size();i++)
++        {
++            ipmi::setDbusProperty(
++                bus, busName, c_objpath[i].c_str(), sensorintfset,
++                "Value", double(0));
++        }
++        ipmi::setDbusProperty(
++            bus, busName, objpath.c_str(), sensorintfset,
++            "Value", double(1<<value));
++		addSelLog(std::string(objpath), std::vector<uint8_t>({value, 0xff, 0xff}));
++    }
++    catch (std::exception &e)
++    {
++        log<level::ERR>("Failed in set Status value property",
++                        entry("EXCEPTION=%s", e.what()));
++        return;
++    }
++}
++
+ /** @brief Implementation of chassis control command
+  *
+  *  @param - chassisControl command byte
+@@ -1380,6 +1430,7 @@ ipmi::RspType<> ipmiChassisControl(uint8_t chassisControl)
+     {
+         case CMD_POWER_ON:
+             rc = initiate_state_transition(State::Host::Transition::On);
++            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_On",2);
+             break;
+         case CMD_POWER_OFF:
+             // This path would be hit in 2 conditions.
+@@ -1414,6 +1465,7 @@ ipmi::RspType<> ipmiChassisControl(uint8_t chassisControl)
+                 log<level::INFO>("Soft off is running, so let shutdown target "
+                                  "stop the host");
+             }
++            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Off",5);
+             break;
+ 
+         case CMD_HARD_RESET:
+@@ -1429,15 +1481,19 @@ ipmi::RspType<> ipmiChassisControl(uint8_t chassisControl)
+             indicate_no_softoff_needed();
+ 
+             rc = initiate_state_transition(State::Host::Transition::Reboot);
++
++            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle",2);
+             break;
+ 
+         case CMD_SOFT_OFF_VIA_OVER_TEMP:
+             // Request Host State Manager to do a soft power off
+             rc = initiate_state_transition(State::Host::Transition::Off);
++            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft",5);
+             break;
+ 
+         case CMD_PULSE_DIAGNOSTIC_INTR:
+             rc = setNmiProperty(true);
++            setIpmiPowerstateToDbus("/xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag",2);
+             break;
+ 
+         default:
+diff --git a/globalhandler.cpp b/globalhandler.cpp
+index c192cbb..92185dd 100644
+--- a/globalhandler.cpp
++++ b/globalhandler.cpp
+@@ -13,6 +13,11 @@ static constexpr auto bmcStateIntf = "xyz.openbmc_project.State.BMC";
+ static constexpr auto reqTransition = "RequestedBMCTransition";
+ static constexpr auto match = "bmc0";
+ 
++static constexpr auto fwstatus = "/xyz/openbmc_project/sensors/status";
++static constexpr auto fwstatus_value = "xyz.openbmc_project.Sensor.Value";
++static constexpr auto fwstatus_property = "Value";
++static constexpr auto fwstatus_match = "Firmware_Status";
++#define BIT(bit) ((uint16_t)(1 << bit))
+ using namespace phosphor::logging;
+ using BMC = sdbusplus::xyz::openbmc_project::State::server::BMC;
+ 
+@@ -22,6 +27,19 @@ void resetBMC()
+ {
+     sdbusplus::bus::bus bus{ipmid_get_sd_bus_connection()};
+ 
++	auto method = bus.new_method_call("xyz.openbmc_project.Logging.IPMI", "/xyz/openbmc_project/Logging/IPMI", "xyz.openbmc_project.Logging.IPMI", "IpmiSelAdd");
++	method.append(std::string{"SEL Entry"});
++	method.append(std::string{"/xyz/openbmc_project/sensors/status/Firmware_Status"});
++	method.append(std::vector<uint8_t>({0x02, 0xff, 0xff}), true, uint16_t(0x0020));
++	try
++	{
++		bus.call(method);
++	}
++	catch (std::exception &e)
++	{
++		std::cerr << e.what() << std::endl;
++	}
++
+     auto bmcStateObj =
+         ipmi::getDbusObject(bus, bmcStateIntf, bmcStateRoot, match);
+ 
+@@ -40,6 +58,8 @@ ipmi::RspType<> ipmiGlobalReset()
+ {
+     try
+     {
++        // set property
++        
+         resetBMC();
+     }
+     catch (std::exception& e)
+diff --git a/storagehandler.cpp b/storagehandler.cpp
+index 232f389..04eb0d0 100644
+--- a/storagehandler.cpp
++++ b/storagehandler.cpp
+@@ -493,6 +493,22 @@ ipmi::RspType<uint8_t // erase status
+ 
+     // Invalidate the cache of dbus entry objects.
+     cache::paths.clear();
++    constexpr auto busName = "xyz.openbmc_project.dissen";
++    constexpr auto sel_objPath = "/xyz/openbmc_project/sensors/status/SEL_Status";
++    constexpr auto selintfset = "xyz.openbmc_project.SEL.Status";
++    try
++    {
++        ipmi::setDbusProperty(
++            bus, busName, sel_objPath, selintfset,
++            "Status", std::string("Clear"));
++    }
++    catch (const InternalFailure& e)
++    {
++        log<level::ERR>("Failed in set Sel_Statue property",
++                        entry("EXCEPTION=%s", e.what()));
++        return ipmi::responseUnspecifiedError();
++    }
++
+     return ipmi::responseSuccess(
+         static_cast<uint8_t>(ipmi::sel::eraseComplete));
+ }
+@@ -778,24 +794,24 @@ ipmi::RspType<uint8_t,  // SDR version
+ 
+ std::string getPlatformID()
+ {
+-    FILE *pf;
++    FILE* pf;
+     char data[COMMAND_LEN] = {0};
+     std::stringstream ss;
+     unsigned int board_id = 0;
+ 
+     // Setup pipe for reading and execute to get u-boot environment
+     // variable board_id.
+-    pf = popen(COMMAND_BOARD_ID,"r");
++    pf = popen(COMMAND_BOARD_ID, "r");
+ 
+-    if(pf > 0)
+-    {   // no error
+-        if (fgets(data, COMMAND_LEN , pf) != NULL)
++    if (pf > 0)
++    { // no error
++        if (fgets(data, COMMAND_LEN, pf) != NULL)
+         {
+             ss << std::hex << (std::string)data;
+             ss >> board_id;
+         }
+         pclose(pf);
+-        if ( board_id > 0 || board_id < 0xFF )
++        if (board_id > 0 || board_id < 0xFF)
+         {
+             switch (board_id)
+             {
+@@ -811,7 +827,7 @@ std::string getPlatformID()
+                     return "sunstone";
+                 default:
+                     return "sunstone";
+-            }//switch
++            } // switch
+         }
+     }
+     else
+@@ -851,8 +867,7 @@ void register_netfn_storage_functions()
+     }
+     else
+     {
+-        log<level::ERR>("Unknown platform?!",
+-                          entry("Registration failed"));
++        log<level::ERR>("Unknown platform?!", entry("Registration failed"));
+     }
+ 
+     // <Get SEL Info>
+-- 
+2.25.1
+

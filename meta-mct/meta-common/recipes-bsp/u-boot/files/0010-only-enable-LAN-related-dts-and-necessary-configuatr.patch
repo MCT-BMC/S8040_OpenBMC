@@ -1,0 +1,196 @@
+From 1283fe0d7cbcc0a4b878672726d41572377d1684 Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Fri, 1 Mar 2024 10:46:48 +0800
+Subject: [PATCH 2/3] only enable LAN related dts and necessary configuatrions
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ arch/arm/dts/ast2600-hawaii.dts | 91 ++++++++++-----------------------
+ 1 file changed, 28 insertions(+), 63 deletions(-)
+
+diff --git a/arch/arm/dts/ast2600-hawaii.dts b/arch/arm/dts/ast2600-hawaii.dts
+index 7db50325c8..e2b3de12be 100644
+--- a/arch/arm/dts/ast2600-hawaii.dts
++++ b/arch/arm/dts/ast2600-hawaii.dts
+@@ -21,8 +21,8 @@
+ 		spi0 = &fmc;
+ 		spi1 = &spi1;
+ 		spi2 = &spi2;
+-		ethernet0 = &mac3;
+-		ethernet1 = &mac2;
++		ethernet0 = &mac0;
++		ethernet1 = &mac3;
+ 	};
+ 
+ 	cpus {
+@@ -45,43 +45,46 @@
+ };
+ 
+ &wdt1 {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &wdt2 {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &wdt3 {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &mdio {
+ 	status = "okay";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_mdio1_default>;
+-
++	#address-cells = <1>;
++	#size-cells = <0>;
+ 	ethphy0: ethernet-phy@0 {
+ 		reg = <0>;
+ 	};
+ };
+ 
+-&mac2 {
++&mac0 {
+ 	status = "okay";
+-	phy-mode = "NC-SI";
+-	use-ncsi;
++	phy-mode = "rgmii-rxid";
++	phy-handle = <&ethphy0>;
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_rmii3_default &pinctrl_rmii3rclk_default>;
++	pinctrl-0 = <&pinctrl_rgmii1_default>;
+ };
+ 
+ &mac3 {
+ 	status = "okay";
+-	phy-mode = "rgmii";
+-	phy-handle = <&ethphy0>;
++	phy-mode = "NC-SI";
++	use-ncsi;
+ 	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_rgmii4_default &pinctrl_mac4link_default>;
++	pinctrl-0 = <&pinctrl_rmii4_default>;
+ };
+ 
++
++
+ // BMC FLASH
+ &fmc {
+ 	status = "okay";
+@@ -101,7 +104,7 @@
+ // FPGA and BIOS FLASH
+ 
+ &spi1 {
+-	status = "okay";
++	status = "disabled";
+ 
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_spi1_default &pinctrl_spi1quad_default>;
+@@ -116,7 +119,7 @@
+ };
+ 
+ &spi2 {
+-	status = "okay";
++	status = "disabled";
+ 
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_spi2_default &pinctrl_spi2quad_default>;
+@@ -136,81 +139,43 @@
+ 
+ // TODO: Re-check pwr-gpios and pwr-sw-gpios
+ &sdhci_slot0 {
+-	status = "okay";
++	status = "disabled";
+ 	bus-width = <4>;
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_sd1_default>;
+ 	sdhci-drive-type = <1>;
+ };
+ 
+-&i2c4 {
+-	status = "okay";
+-
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_i2c5_default>;
+-};
+-
+-&i2c5 {
+-	status = "okay";
+-
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_i2c6_default>;
+-};
+-
+-&i2c6 {
+-	status = "okay";
+-
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_i2c7_default>;
+-};
+-
+-&i2c7 {
+-	status = "okay";
+-
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_i2c8_default>;
+-};
+-
+-&i2c8 {
+-	status = "okay";
+-
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_i2c9_default>;
+-};
+-
+-&i2c14 {
+-	status = "okay";
+-
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_i2c15_default>;
+-};
+ 
+ &pcie_bridge1 {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &h2x {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &ehci1 {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &display_port {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &scu {
+ 	mac3-clk-delay = <0x0a 0x04
+ 			  0x08 0x04
+ 			  0x08 0x04>;
++	mac2-clk-delay = <0x8 0x4 0x8 0x4 0x8 0x4>;
++	mac1-clk-delay = <0x10 0xa 0x10 0x10 0x10 0x10>;
++	mac0-clk-delay = <0x10 0xa 0x10 0x10 0x10 0x10>;
+ };
+ 
+ &hace {
+-	status = "okay";
++	status = "disabled";
+ };
+ 
+ &display_port {
+-	status = "okay";
++	status = "disabled";
+ };
+-- 
+2.17.1
+

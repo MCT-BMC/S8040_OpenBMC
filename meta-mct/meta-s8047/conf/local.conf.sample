@@ -236,6 +236,6 @@ PACKAGECONFIG_append_pn-nativesdk-qemu = " sdl"
 # track the version of this file when it was generated. This can safely be ignored if
 # this doesn't mean anything to you.
 CONF_VERSION = "1"
-CONNECTIVITY_CHECK_URIS = ""
+#CONNECTIVITY_CHECK_URIS = ""
 #BB_FETCH_PREMIRRORONLY = "1"
-##BB_NO_NETWORK = "1"
+###BB_NO_NETWORK = "1"

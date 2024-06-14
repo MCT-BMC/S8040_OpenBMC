@@ -15,13 +15,10 @@ def run_git(d, cmd):
         bb.warn("Unexpected exception from 'git' call: %s" % e)
         pass
 
-#VERSION_ID := "${@run_git(d, 'describe --dirty')}"
-VERSION_ID := "0.01"
-#VERSION = "${@'-'.join(d.getVar('VERSION_ID').split('-')[0:2])}"
-VERSION = "0.01.00"
+VERSION_ID := "${@run_git(d, 'describe --dirty')}"
+VERSION = "${@'-'.join(d.getVar('VERSION_ID').split('-')[0:2])}"
 
-#BUILD_ID := "${@run_git(d, 'describe --abbrev=0')}"
-BUILD_ID = "${DATETIME}"
+BUILD_ID := "${@run_git(d, 'describe --abbrev=0')}"
 OPENBMC_TARGET_MACHINE = "${MACHINE}"
 
 OS_RELEASE_FIELDS_append = " BUILD_ID OPENBMC_TARGET_MACHINE EXTENDED_VERSION"
@@ -31,5 +28,3 @@ BB_DONT_CACHE = "1"
 
 # Make os-release available to other recipes.
 SYSROOT_DIRS_append = " ${sysconfdir}"
-
-

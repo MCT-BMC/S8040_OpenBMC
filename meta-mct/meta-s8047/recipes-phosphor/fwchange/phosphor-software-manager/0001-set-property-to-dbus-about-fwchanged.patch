@@ -1,0 +1,39 @@
+From 83e4a257349df22254ec0c5f4b5b9e82fafdfa85 Mon Sep 17 00:00:00 2001
+From: ander <ander.shi@insyde.com>
+Date: Fri, 10 May 2024 10:11:45 +0800
+Subject: [PATCH] set property to dbus about fwchanged
+
+---
+ static/flash.cpp | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/static/flash.cpp b/static/flash.cpp
+index 101828b..f871ce0 100644
+--- a/static/flash.cpp
++++ b/static/flash.cpp
+@@ -36,6 +36,22 @@ void Activation::flashWrite()
+         fs::copy_file(uploadDir / versionId / bmcImage, toPath / bmcImage,
+                       fs::copy_options::overwrite_existing);
+     }
++
++    //
++    auto method = this->bus.new_method_call("xyz.openbmc_project.dissen", "/xyz/openbmc_project/sensors/status/Firmware_Change",
++                                            "org.freedesktop.DBus.Properties",
++                                            "Set" );
++    method.append("xyz.openbmc_project.FwChange.Status","Status");
++    method.append(std::variant<std::string>{"Changed"});
++    try
++    {
++        bus.call_noreply(method);
++    }
++    catch (...)
++    {
++        return;
++    }
++
+ }
+ 
+ void Activation::onStateChanges(sdbusplus::message::message& /*msg*/)
+-- 
+2.25.1
+

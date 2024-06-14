@@ -1,0 +1,92 @@
+{
+    "sensors": [
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/ACPI_Pwr_Status"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/Chassis_Status"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/IPMI_Watchdog",
+        "sinterfaces": "xyz.openbmc_project.WDT.Status",
+        "sinitvalue" : "None"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/SEL_Status",
+        "sinterfaces": "xyz.openbmc_project.SEL.Status",
+        "sinitvalue" : "None"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/System_Event"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/Firmware_Status"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/Firmware_Change",
+        "sinterfaces": "xyz.openbmc_project.FwChange.Status",
+        "sinitvalue" : "None"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/Button_Status"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/NMI_BTN_Status"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/CPU0_Status"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Off"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/IPMI_Pwr_On"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Cycle"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Reset"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Soft"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/IPMI_Pwr_Diag"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHB_DIM1_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHA_DIM1_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHD_DIM0_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHD_DIM1_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHE_DIM1_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHF_DIM1_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHH_DIM0_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/P0_CHH_DIM1_S"
+      },
+      {
+        "objpath": "/xyz/openbmc_project/sensors/status/PWR_Unit_Status"
+      }
+    ],
+    "gpio_configs": [
+      {
+        "Name": "CPU0_Thermtrip",
+        "LineName": "P0_P1_THERMTRIP_L",
+        "Polarity": "ActiveLow"
+      }
+    ]
+  }

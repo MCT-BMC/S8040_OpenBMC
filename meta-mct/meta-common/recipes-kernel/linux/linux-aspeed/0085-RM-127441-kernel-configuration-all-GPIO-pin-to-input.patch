@@ -1,0 +1,91 @@
+From f6bc774e7505384ee0142556b5cb6340aca577e6 Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Thu, 7 Mar 2024 15:21:52 +0800
+Subject: [PATCH] [RM#127441][kernel] configuration all GPIO pin to input but
+ GPIOG1(set output low) in kernel dts
+
+Tag#: 03.54.23.0009
+Issue#: IB21780026
+Severity: Normal
+Category: Kernel
+Symptom: N/A
+RootCause: N/A
+Description: configuration all GPIO pin to input but GPIOG1(set output low) in kernel dts
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: IB19670000
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 29 +++++++------------
+ 1 file changed, 11 insertions(+), 18 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 3dbfd1f9d64d..c174ca623043 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -23,18 +23,6 @@
+ 		bootargs = "console=ttyS4,115200 earlycon vmalloc=512MB";
+ 	};
+ 
+-	leds {
+-		compatible = "gpio-leds";
+-
+-		fault {
+-			gpios = <&gpio0 ASPEED_GPIO(O, 6) GPIO_ACTIVE_HIGH>;
+-		};
+-
+-		identify {
+-			gpios = <&gpio0 ASPEED_GPIO(O, 7) GPIO_ACTIVE_HIGH>;
+-		};
+-	};
+-
+ 	memory@80000000 {
+ 		device_type = "memory";
+ 		reg = <0x80000000 0x80000000>;
+@@ -473,14 +461,14 @@
+ 	/*D0-D7*/	"","","","","","","","",
+ 	/*E0-E7*/	"","","","","","","","",
+ 	/*F0-F7*/	"","","","","","","","",
+-	/*G0-G7*/	"","","","","","","","",
+-	/*H0-H7*/	"","ASSERT_WARM_RST_BTN_L","ASSERT_SOC_RST_BTN_L","","","","","",
++	/*G0-G7*/	"","ASSERT_BMC_READY","","","","","","",
++	/*H0-H7*/	"","","ASSERT_SOC_RST_BTN_L","","","","","",
+ 	/*I0-I7*/	"","","","","","","","P0_I3C_APML_ALERT_L",
+ 	/*J0-J7*/	"","","","","","","","",
+ 	/*K0-K7*/	"","","","","","","","",
+ 	/*L0-L7*/	"","","","","","","","",
+ 	/*M0-M7*/	"","","","","","","","",
+-	/*N0-N7*/	"","","","","","","PSP_SOFT_FUSE_NOTIFY","ASSERT_BMC_READY",
++	/*N0-N7*/	"","","","","","","PSP_SOFT_FUSE_NOTIFY","",
+ 	/*O0-O7*/	"","","HDT_SEL","HDT_XTRIG5","HDT_XTRIG6","JTAG_TRST_N","","",
+ 	/*P0-P7*/	"MON_RST_BTN_L","ASSERT_RST_BTN_L","MON_PWR_BTN_L","ASSERT_PWR_BTN_L","","ASSERT_NMI_BTN_L","MON_PWR_GOOD","",
+ 	/*Q0-Q7*/	"","","HDT_DBREQ_L","","BIOS_SPD_MUX_CTRL_RELEASED_L","","","",
+@@ -496,6 +484,13 @@
+ 	/*AA0-AA7*/	"","","","","","","","",
+ 	/*AB0-AB7*/	"","","","","","","","",
+ 	/*AC0-AC7*/	"","","","","","","","";
++
++	gpio49 {
++        gpio-hog;
++        gpios = <ASPEED_GPIO(G, 1) GPIO_ACTIVE_LOW>;
++        output-low;
++        line-name = "gpio-hog-1";
++    };
+ };
+ 
+ &jtag1 {
+@@ -531,9 +526,7 @@
+ };
+ 
+ // eSPI Virtual UART - 0x3F8
+-&vuart1 {
+-	status = "okay";
+-};
++
+ 
+ &chassis {
+ 	status = "okay";
+-- 
+2.17.1
+

@@ -1,0 +1,48 @@
+From 964c2eea5168fe4fa6cc677b6837bc90b5b9b09c Mon Sep 17 00:00:00 2001
+From: George Yeh <george.yeh@insyde.com>
+Date: Thu, 16 May 2024 15:45:35 +0800
+Subject: [PATCH] [RM#132917][IPMI][CMD] phase 1 - implement the response of
+ get device id and BMC self test the same as AMI via hard code
+
+Tag#: 03.54.23.0009
+Issue#: IB21780037
+Severity: Normal
+Category: IPMI
+Symptom: N/A
+RootCause: N/A
+Description: phase 1 - implement the response of get device id and BMC self test the same as AMI via hard code
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: IB19670000
+
+Signed-off-by: George Yeh <george.yeh@insyde.com>
+---
+ apphandler.cpp | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/apphandler.cpp b/apphandler.cpp
+index 90818a9..35ec21b 100644
+--- a/apphandler.cpp
++++ b/apphandler.cpp
+@@ -667,7 +667,8 @@ ipmi::RspType<uint8_t,  // Device ID
+     {
+         devId.fw[0] |= (1 << ipmiDevIdStateShift);
+     }
+-
++    devId.fw[0] = 0x0;
++    devId.fw[1] = 0x10;
+     return ipmi::responseSuccess(
+         devId.id, devId.revision, devId.fw[0], devId.fw[1], devId.ipmiVer,
+         devId.addnDevSupport, devId.manufId, devId.prodId, devId.aux);
+@@ -695,7 +696,7 @@ auto ipmiAppGetSelfTestResults() -> ipmi::RspType<uint8_t, uint8_t>
+     //      [2] 1b = Internal Use Area of BMC FRU corrupted.
+     //      [1] 1b = controller update 'boot block' firmware corrupted.
+     //      [0] 1b = controller operational firmware corrupted.
+-    constexpr uint8_t notImplemented = 0x56;
++    constexpr uint8_t notImplemented = 0x55;
+     constexpr uint8_t zero = 0;
+     return ipmi::responseSuccess(notImplemented, zero);
+ }
+-- 
+2.17.1
+

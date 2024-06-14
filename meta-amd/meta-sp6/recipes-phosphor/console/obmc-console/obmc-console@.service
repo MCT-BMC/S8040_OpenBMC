@@ -1,0 +1,10 @@
+[Unit]
+Description=%i Console Server
+
+[Service]
+ExecStart=/usr/bin/env obmc-console-server --config /etc/obmc-console/server.%i.conf %i
+SyslogIdentifier=%i-console-server
+Restart=always
+
+[Install]
+WantedBy={SYSTEMD_DEFAULT_TARGET}

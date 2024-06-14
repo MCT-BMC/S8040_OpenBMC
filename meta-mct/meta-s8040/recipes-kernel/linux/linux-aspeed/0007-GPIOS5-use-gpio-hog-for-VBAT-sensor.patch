@@ -1,0 +1,35 @@
+From 508cb22336d83da4f328529b20913d15793a8b99 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Fri, 31 May 2024 12:23:19 +0800
+Subject: [PATCH] GPIOS5 use gpio hog for VBAT sensor
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 77a074d83694..7a3bfd402852 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -676,6 +676,11 @@ gpio49 {
+             output-low;
+             line-name = "ASSERT_BMC_READY";
+         };
++        gpio149 {
++            gpio-hog;
++            gpios = <ASPEED_GPIO(S, 5) GPIO_ACTIVE_HIGH>;
++            output-high;
++        };
+ };
+
+ &jtag1 {
+@@ -734,4 +739,4 @@ &bmc_dev {
+
+ &vuart1{
+         status = "okay";
+-};
+\ No newline at end of file
++};
+--
+2.45.1

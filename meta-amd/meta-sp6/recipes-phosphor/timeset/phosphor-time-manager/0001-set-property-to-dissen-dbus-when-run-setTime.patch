@@ -1,0 +1,71 @@
+From 17d62adb7623ebfed251eb5da6acff387867cc19 Mon Sep 17 00:00:00 2001
+From: ander <ander.shi@insyde.com>
+Date: Thu, 30 May 2024 15:16:48 +0800
+Subject: [PATCH] set property to dissen dbus when run setTime
+
+---
+ epoch_base.cpp | 33 ++++++++++++++++++++++++++++++++-
+ 1 file changed, 32 insertions(+), 1 deletion(-)
+
+diff --git a/epoch_base.cpp b/epoch_base.cpp
+index 96552ac..a242852 100644
+--- a/epoch_base.cpp
++++ b/epoch_base.cpp
+@@ -7,7 +7,7 @@
+ 
+ #include <iomanip>
+ #include <sstream>
+-
++#include <vector>
+ namespace // anonymous
+ {
+ constexpr auto SYSTEMD_TIME_SERVICE = "org.freedesktop.timedate1";
+@@ -36,6 +36,7 @@ void EpochBase::onModeChanged(Mode mode)
+ using namespace std::chrono;
+ bool EpochBase::setTime(const microseconds& usec)
+ {
++
+     auto method = bus.new_method_call(SYSTEMD_TIME_SERVICE, SYSTEMD_TIME_PATH,
+                                       SYSTEMD_TIME_INTERFACE, METHOD_SET_TIME);
+     method.append(static_cast<int64_t>(usec.count()),
+@@ -51,7 +52,37 @@ bool EpochBase::setTime(const microseconds& usec)
+         log<level::ERR>("Error in setting system time");
+         using namespace xyz::openbmc_project::Time;
+         elog<FailedError>(Failed::REASON(ex.what()));
++        return true;
++    }
++
++    auto system_method = bus.new_method_call("xyz.openbmc_project.dissen", "/xyz/openbmc_project/sensors/status/System_Event",
++                                            "org.freedesktop.DBus.Properties","Set");
++    system_method.append("xyz.openbmc_project.Sensor.Value","Value");
++    system_method.append(std::variant<double>(double(32)));
++    try
++    {
++        bus.call_noreply(system_method);
+     }
++    catch (const sdbusplus::exception::SdBusError& ex)
++    {
++        log<level::ERR>(ex.what());
++    }
++
++
++    auto sel_method = bus.new_method_call("xyz.openbmc_project.Logging.IPMI", "/xyz/openbmc_project/Logging/IPMI", "xyz.openbmc_project.Logging.IPMI", "IpmiSelAdd");
++    sel_method.append("SEL Entry","/xyz/openbmc_project/sensors/status/System_Event");
++    // sel_method.append("/xyz/openbmc_project/sensors/status/System_Event");
++    sel_method.append(std::vector<uint8_t>({0x05, 0xff, 0xff}), true, uint16_t(0x0020));
++    try
++    {
++    	bus.call_noreply(sel_method);
++    }
++    catch (const sdbusplus::exception::SdBusError& ex)
++    {
++        log<level::ERR>(ex.what());
++    }
++
++
+     return true;
+ }
+ 
+-- 
+2.25.1
+

@@ -23,7 +23,8 @@ function get_board_info ()
             name="shale"
        ;;
        *)  # Default
-            name="sp6"
+            #name="sp6"
+            name="s8047"
     esac
     if [ "$1" == "name" ]; then
         echo -ne $name
@@ -51,7 +52,8 @@ function get_hpm_fpga_ver()
             echo -ne $MAJOR.$MINOR.$REV
         fi
     fi
-    if [ "$plat" == "sp6" ]; then
+    #if [ "$plat" == "sp6" ]; then
+    if [ "$plat" == "s8047" ]; then
         echo -ne Unknown
     fi
 }

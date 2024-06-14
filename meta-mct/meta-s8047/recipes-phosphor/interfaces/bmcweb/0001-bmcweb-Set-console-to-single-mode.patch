@@ -1,0 +1,26 @@
+From 50371b45a36368e6b80bafd2ab7df63428c63951 Mon Sep 17 00:00:00 2001
+From: "alex.huang" <alex.huang@insyde.com>
+Date: Mon, 20 May 2024 17:36:36 +0800
+Subject: [PATCH] bmcweb: Set console to single mode
+
+Signed-off-by: alex.huang <alex.huang@insyde.com>
+---
+ include/obmc_console.hpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/include/obmc_console.hpp b/include/obmc_console.hpp
+index d0fc7475..2a9bf446 100644
+--- a/include/obmc_console.hpp
++++ b/include/obmc_console.hpp
+@@ -127,7 +127,7 @@ inline void requestRoutes(App& app)
+             if (hostSocket == nullptr)
+             {
+                 // append socket-id for UI when using multiple servers (.host0)
+-                const std::string consoleName("\0obmc-console.host0", 19);
++                const std::string consoleName("\0obmc-console", 13);
+                 boost::asio::local::stream_protocol::endpoint ep(consoleName);
+ 
+                 hostSocket = std::make_unique<
+-- 
+2.25.1
+

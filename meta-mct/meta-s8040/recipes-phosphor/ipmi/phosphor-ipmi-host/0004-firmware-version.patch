@@ -29,8 +29,8 @@ index 90818a9..35ec21b 100644
          devId.fw[0] |= (1 << ipmiDevIdStateShift);
      }
 -
-+    devId.fw[0] = 0x1;
-+    devId.fw[1] = 0x1;
++    devId.fw[0] = 0x0;
++    devId.fw[1] = 0x03;
      return ipmi::responseSuccess(
          devId.id, devId.revision, devId.fw[0], devId.fw[1], devId.ipmiVer,
          devId.addnDevSupport, devId.manufId, devId.prodId, devId.aux);

@@ -13,7 +13,6 @@ BBLAYERS ?= " \
   ##OEROOT##/meta-openembedded/meta-python \
   ##OEROOT##/meta-phosphor \
   ##OEROOT##/meta-aspeed \
-  ##OEROOT##/meta-amd \
   ##OEROOT##/meta-mct \
   ##OEROOT##/meta-mct/meta-s8040 \
   "
@@ -25,7 +24,6 @@ BBLAYERS_NON_REMOVABLE ?= " \
   ##OEROOT##/meta-openembedded/meta-python \
   ##OEROOT##/meta-phosphor \
   ##OEROOT##/meta-aspeed \
-  ##OEROOT##/meta-amd \
   ##OEROOT##/meta-mct \
   ##OEROOT##/meta-mct/meta-s8040 \
   "

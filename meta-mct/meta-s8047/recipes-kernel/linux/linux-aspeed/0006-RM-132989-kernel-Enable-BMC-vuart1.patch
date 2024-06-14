@@ -1,0 +1,37 @@
+From e470911c119c9889e29185bba6554dcb3153c1d0 Mon Sep 17 00:00:00 2001
+From: "alex.huang" <alex.huang@insyde.com>
+Date: Mon, 20 May 2024 17:30:57 +0800
+Subject: [PATCH] [RM#132989][kernel] Enable BMC vuart1.
+
+Tag#: 03.54.23.0063
+Issue#: IB71770003
+Severity: Normal
+Category: kernel
+Symptom: N/A
+RootCause: N/A
+Description: As title
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: alex.huang <alex.huang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 9e91feaba71f..77a074d83694 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -731,3 +731,7 @@ &bmc_dev {
+         status = "okay";
+         memory-region = <&bmc_dev_memory>;
+ };
++
++&vuart1{
++        status = "okay";
++};
+\ No newline at end of file
+-- 
+2.25.1
+
