@@ -3,8 +3,8 @@ DESCRIPTION = "CPU Info monitors the dbus interface\
 xyz.openbmc_project.Inventory.Item.Cpu_info.service for Processor property \
 and applies the CPU values to the SOC using esmi oob library API's"
 
-SRC_URI = "git://git@github.com/AMDESE/bmc-cpuinfo.git;branch=main;protocol=ssh"
-#SRC_URI = "git://git@github.com/AMDESE/bmc-cpuinfo.git;branch=main;protocol=https"
+#SRC_URI = "git://git@github.com/AMDESE/bmc-cpuinfo.git;branch=main;protocol=ssh"
+SRC_URI = "git://git@github.com/AMDESE/bmc-cpuinfo.git;branch=main;protocol=https"
 #SRCREV = "${AUTOREV}"
 SRCREV = "f2f84a7f72fd8a6e15c1fad7b0a22d4178c6aa44"
 

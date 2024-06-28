@@ -20,5 +20,6 @@ SRC_URI += "file://0001-script-changes-for-mako-templates-and-platforms.patch \
             file://0004-firmware-version.patch \
             file://0005-set-property-to-discrete-sensors-for-mitac-project.patch \
             file://0006-Fix-ipmi-command-chassis-power-off-failed.patch \
+            file://0007-ipmitool-sdr-elist-to-show-No-Reading.patch \
             "
 

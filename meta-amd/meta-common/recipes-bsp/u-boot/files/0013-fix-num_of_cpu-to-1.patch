@@ -1,0 +1,25 @@
+From b848c62b1e535d98f3cbebc87d05c69b83c926d0 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Tue, 11 Jun 2024 15:50:51 +0800
+Subject: [PATCH] fix num_of_cpu to 1
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ common/main.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/common/main.c b/common/main.c
+index e8f10c66fa..9c69b960b0 100644
+--- a/common/main.c
++++ b/common/main.c
+@@ -273,6 +273,7 @@ void main_loop(void)
+ 	/* Read board id from eerpom and set env */
+ 	//set_board_id();
+ 	env_set("board_id", "63");
++	env_set("num_of_cpu", "1");
+ 	env_save();
+ 	set_hostname();
+ 	s = bootdelay_process();
+-- 
+2.45.1
+

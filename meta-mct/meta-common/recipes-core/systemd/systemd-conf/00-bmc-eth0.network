@@ -2,7 +2,7 @@
 Name=eth0
 [Network]
 DHCP=true
-LinkLocalAddressing=yes
+LinkLocalAddressing=no
 IPv6AcceptRA=true
 [DHCP]
 ClientIdentifier=mac

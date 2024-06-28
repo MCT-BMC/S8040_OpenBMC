@@ -5,7 +5,7 @@ and applies the CPU values to the SOC using esmi oob library API's"
 
 #SRC_URI = "git://git@github.com/AMDESE/bmc-cpuinfo.git;branch=main;protocol=ssh"
 #SRC_URI = "git://git@github.com/AMDESE/bmc-cpuinfo.git;branch=main;protocol=https"
-SRC_URI = "git://git@micgitlab1.mic.com.tw/grdc/rdc5/rdd2/bmc/openbmc/amd/bmc-cpuinfo.git;branch=main;protocol=https"
+SRC_URI = "git://git@micgitlab1-ssh.mic.com.tw:1022/grdc/rdc5/rdd2/bmc/openbmc/amd/bmc-cpuinfo.git;branch=main;protocol=ssh"
 SRCREV = "${AUTOREV}"
 
 S = "${WORKDIR}/git"

@@ -8,4 +8,7 @@ SRC_URI += "file://sp6.cfg \
 	    file://0005-RM-131314-Linux-Enable-NCSI-Feature.patch \
             file://0006-RM-132989-kernel-Enable-BMC-vuart1.patch \
             file://0007-GPIOS5-use-gpio-hog-for-VBAT-sensor.patch \
+            file://0008-If-fan-speed-is-no-reading-return-ENXIO.patch \
+            file://0009-Remove-1-fan-for-mitac-platform.patch \
+            file://0010-Kernel-Setting-for-Bios-Update.patch \
            "

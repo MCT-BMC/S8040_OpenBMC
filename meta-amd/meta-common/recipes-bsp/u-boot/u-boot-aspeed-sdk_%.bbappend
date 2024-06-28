@@ -15,4 +15,5 @@ SRC_URI += "file://amd-ast2600-u-boot.cfg \
             file://0010-only-enable-LAN-related-dts-and-necessary-configuatr.patch \
             file://0011-fix-board-id-to-63-Cinnabar-CRB-and-set-related-boot.patch \
             file://0012-RM-129419-ACPI-Bootloader-Enable-ACPI-and-GPIO0123-pass-thru-in-bootloader.patch \
+            file://0013-fix-num_of_cpu-to-1.patch \
             "

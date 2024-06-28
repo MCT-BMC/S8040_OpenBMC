@@ -64,4 +64,5 @@ RDEPENDS_${PN}-system = " \
         webui-vue \
 	dissen \
         phosphor-watchdog \
+        ipmi-fru \
         "

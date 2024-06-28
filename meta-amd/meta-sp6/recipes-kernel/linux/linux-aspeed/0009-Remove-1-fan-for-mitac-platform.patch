@@ -1,0 +1,66 @@
+From 2d07812514ec2fb53935052932117afed07d9893 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Fri, 14 Jun 2024 13:30:00 +0800
+Subject: [PATCH] Remove 1 fan for mitac platform.
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 23 ++++++++-----------
+ 1 file changed, 9 insertions(+), 14 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 7a3bfd402852..d88aef0a902d 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -178,12 +178,11 @@ &pwm_tacho {
+ 	aspeed,pwm-outputs = <7>;
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_pwm0_default &pinctrl_tach0_default
+-			&pinctrl_pwm1_default &pinctrl_tach1_default
+-			&pinctrl_pwm2_default &pinctrl_tach2_default
+-			&pinctrl_pwm3_default &pinctrl_tach3_default
+-			&pinctrl_pwm4_default &pinctrl_tach4_default
+-			&pinctrl_pwm5_default &pinctrl_tach5_default
+-			&pinctrl_tach6_default>;
++			&pinctrl_pwm1_default &pinctrl_tach2_default
++			&pinctrl_pwm2_default &pinctrl_tach3_default
++			&pinctrl_pwm3_default &pinctrl_tach4_default
++			&pinctrl_pwm4_default &pinctrl_tach5_default
++			&pinctrl_pwm5_default &pinctrl_tach6_default>;
+ 
+ 	fan@0 {
+ 		reg = <0x00>;
+@@ -191,26 +190,22 @@ fan@0 {
+ 	};
+ 	fan@1 {
+ 		reg = <0x01>;
+-		aspeed,fan-tach-ch = /bits/ 8 <0x01>;
++		aspeed,fan-tach-ch = /bits/ 8 <0x02>;
+ 	};
+ 	fan@2 {
+ 		reg = <0x02>;
+-		aspeed,fan-tach-ch = /bits/ 8 <0x02>;
++		aspeed,fan-tach-ch = /bits/ 8 <0x03>;
+ 	};
+ 	fan@3 {
+ 		reg = <0x03>;
+-		aspeed,fan-tach-ch = /bits/ 8 <0x03>;
++		aspeed,fan-tach-ch = /bits/ 8 <0x04>;
+ 	};
+ 	fan@4 {
+ 		reg = <0x04>;
+-		aspeed,fan-tach-ch = /bits/ 8 <0x04>;
++		aspeed,fan-tach-ch = /bits/ 8 <0x05>;
+ 	};
+ 	fan@5 {
+ 		reg = <0x05>;
+-		aspeed,fan-tach-ch = /bits/ 8 <0x05>;
+-	};
+-	fan@6 {
+-		reg = <0x06>;
+ 		aspeed,fan-tach-ch = /bits/ 8 <0x06>;
+ 	};
+ };
+-- 
+2.45.1
+

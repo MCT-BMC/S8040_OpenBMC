@@ -888,7 +888,7 @@
         Offsets:
           0xFF:
             type: double
-0x30:
+0x85:
   sensorType: 0x7
   entityID: 0x03
   path: /xyz/openbmc_project/sensors/status/CPU0_Status

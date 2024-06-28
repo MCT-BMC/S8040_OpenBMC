@@ -1,0 +1,1 @@
+IMAGE_INSTALL += "phosphor-ipmi-ipmb"

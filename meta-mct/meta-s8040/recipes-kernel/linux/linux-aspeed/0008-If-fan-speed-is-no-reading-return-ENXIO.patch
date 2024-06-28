@@ -1,0 +1,28 @@
+From bd14723e957beb6f26b29361da8a081d6626cc04 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Tue, 4 Jun 2024 09:59:53 +0800
+Subject: [PATCH] If fan speed is no reading, return ENXIO
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ drivers/hwmon/aspeed-g6-pwm-tacho.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/hwmon/aspeed-g6-pwm-tacho.c b/drivers/hwmon/aspeed-g6-pwm-tacho.c
+index f9bfc83b32fe..bcf5aeaa564a 100755
+--- a/drivers/hwmon/aspeed-g6-pwm-tacho.c
++++ b/drivers/hwmon/aspeed-g6-pwm-tacho.c
+@@ -665,7 +665,9 @@ static ssize_t show_rpm(struct device *dev, struct device_attribute *attr,
+ 
+ 	rpm = aspeed_get_fan_tach_ch_rpm(priv, index);
+ 	if (rpm < 0)
+-		return rpm;
++                return rpm;
++	if (rpm == 0)
++		return -ENXIO;
+ 
+ 	return sprintf(buf, "%d\n", rpm);
+ }
+-- 
+2.45.1
+

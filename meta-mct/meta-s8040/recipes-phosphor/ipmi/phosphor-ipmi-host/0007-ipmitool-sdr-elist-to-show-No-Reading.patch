@@ -1,0 +1,28 @@
+From 4fcd435ef38d82aee8741942fae986fe1c98aa9b Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Thu, 13 Jun 2024 14:46:53 +0800
+Subject: [PATCH] ipmitool sdr elist to show No Reading.
+
+Signed-off-by: ander <ander.shi@insyde.com>
+---
+ sensorhandler.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/sensorhandler.cpp b/sensorhandler.cpp
+index f051617..091056d 100644
+--- a/sensorhandler.cpp
++++ b/sensorhandler.cpp
+@@ -455,8 +455,8 @@ ipmi::RspType<uint8_t, // sensor reading
+         constexpr uint8_t senReading = 0;
+         constexpr uint5_t reserved{0};
+         constexpr bool readState = true;
+-        constexpr bool senScanState = false;
+-        constexpr bool allEventMessageState = false;
++        constexpr bool senScanState = true;
++        constexpr bool allEventMessageState = true;
+         constexpr uint8_t assertionStatesLsb = 0;
+         constexpr uint8_t assertionStatesMsb = 0;
+ 
+-- 
+2.45.1
+
