@@ -1,4 +1,4 @@
-SRC = ipmi-fru.cpp ipmi-fru.hpp
+SRC = ipmi-fru.cpp
 SO_VERSION = 1
 OUTPUT = libipmi-fru.so.$(SO_VERSION)
 CFLAGS += -O3 -Wno-unused-result -std=c++20

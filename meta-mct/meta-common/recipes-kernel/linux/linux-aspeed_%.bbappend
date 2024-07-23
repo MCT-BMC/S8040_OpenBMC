@@ -94,4 +94,5 @@ SRC_URI += "file://amd-bmc-baseline.cfg \
             file://0092-RM-132911-IPMI-KCS-Enable-KCS-channel-with-lpc-io-reg-0xCA8.patch \
             file://0093-RM-132276-FRU-Add-EEPROM-config-in-dts.patch \
             file://0094-RM-133218-BIOS-POST-Code-Fix-BIOS-POST-code-0xff-issue.patch \
+            file://0095-aspeed-lpc-pcc-Implement-A2600-15-workaround.patch \
            " 

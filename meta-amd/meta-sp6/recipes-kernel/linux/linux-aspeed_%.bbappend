@@ -11,4 +11,5 @@ SRC_URI += "file://sp6.cfg \
             file://0008-If-fan-speed-is-no-reading-return-ENXIO.patch \
             file://0009-Remove-1-fan-for-mitac-platform.patch \
             file://0010-Kernel-Setting-for-Bios-Update.patch \
+            file://0011-Resolve-list-corruption-issue-in-PWM-driver-re-bind.patch \
            "

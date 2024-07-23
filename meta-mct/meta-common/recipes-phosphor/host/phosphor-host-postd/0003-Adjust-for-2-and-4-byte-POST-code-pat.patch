@@ -1,0 +1,80 @@
+From 5165173e568ee59fa30703d92de51eaf30f007f9 Mon Sep 17 00:00:00 2001
+From: "austin.su" <austin.su@insyde.com>
+Date: Tue, 25 Jun 2024 14:18:27 +0800
+Subject: [PATCH] aspeed: lpc-pcc: Adjust for 2 and 4 byte POST code patterns
+
+- Update pattern matching for 2 and 4 byte codes
+- Adjust code extraction logic
+- Modify snooper output to display 4 hex digits
+- Remove unused 6 and 8 byte patterns and macros
+---
+ example.cpp |  2 +-
+ main.cpp    | 23 +++++++----------------
+ 2 files changed, 8 insertions(+), 17 deletions(-)
+
+diff --git a/example.cpp b/example.cpp
+index 9bec1b9..1bea2d5 100644
+--- a/example.cpp
++++ b/example.cpp
+@@ -25,7 +25,7 @@
+ static void printPostcode(postcode_t postcode)
+ {
+     /* Print output to verify the example program is receiving values. */
+-    std::printf("recv: 0x%" PRIx64 "\n",
++    std::printf("recv: 0x%04" PRIx64 "\n",
+                 std::get<primary_post_code_t>(postcode));
+ }
+ 
+diff --git a/main.cpp b/main.cpp
+index 1af643f..1785380 100644
+--- a/main.cpp
++++ b/main.cpp
+@@ -35,16 +35,12 @@
+ #define PAT_MATCH(x, y)         (((x) & (y)) == (y))
+ #define PAT_NOT_MATCH(x, y)     (((x) & (y)) != (y))
+ 
+-#define FULL_8B_PATTERN         (0x4300420041004000ull)
+-#define PART_6B_PATTERN         (0x0000430042004100ull)
+-#define PART_4B_PATTERN         (0x0000000043004200ull)
+-#define PART_2B_PATTERN         (0x0000000000004300ull)
++#define FULL_4B_PATTERN         (0x0000000041004000ull)
++#define PART_2B_PATTERN         (0x0000000000004100ull)
+ 
+-#define GET_BYTE_7(x)           ((x & 0x00FF000000000000ull) >> 48)
+-#define GET_BYTE_5(x)           ((x & 0x000000FF00000000ull) >> 32)
+ #define GET_BYTE_3(x)           ((x & 0x0000000000FF0000ull) >> 16)
+ #define GET_BYTE_1(x)           ((x & 0x00000000000000FFull))
+-#define ESPI_PCC_PC_SIZE        (8)
++#define ESPI_PCC_PC_SIZE        (4)
+ 
+ static size_t codeSize = 1; /* Size of each POST code in bytes */
+ 
+@@ -81,14 +77,10 @@ bool is_code_good(const uint64_t code, int* rem_bytes)
+         return false;
+     }
+ 
+-    if(PAT_NOT_MATCH(code, FULL_8B_PATTERN))
++    if(PAT_NOT_MATCH(code, FULL_4B_PATTERN))
+     {
+-        if(PAT_MATCH(code, PART_6B_PATTERN))
+-            *rem_bytes = 2;
+-        if(PAT_MATCH(code, PART_4B_PATTERN))
+-            *rem_bytes = 4;
+         if(PAT_MATCH(code, PART_2B_PATTERN))
+-            *rem_bytes = 6;
++            *rem_bytes = 2;
+ 
+         if((*rem_bytes) == 0)
+             *rem_bytes = ESPI_PCC_PC_SIZE;    /* no partial pattern */
+@@ -129,9 +121,8 @@ void PostCodeEventHandler(sdeventplus::source::IO& s, int postFd, uint32_t,
+                 }
+             }
+         }
+-        // extract 0xppqqrrss from 0x43pp42qq41rr40ss pattern
+-        trunc_code = ((GET_BYTE_7(code) << 24) | (GET_BYTE_5(code) << 16) |
+-                      (GET_BYTE_3(code) << 8) | GET_BYTE_1(code));
++        // extract 0xppqq from 0x41pp40qq pattern
++        trunc_code = ((GET_BYTE_3(code) << 8) | GET_BYTE_1(code));
+ 
+         code = trunc_code;
+ 

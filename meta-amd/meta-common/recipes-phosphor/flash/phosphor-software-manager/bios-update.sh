@@ -9,6 +9,22 @@ if [[ "$IMAGE_FILE" != /* ]]; then
         IMAGE_FILE="$(pwd)/$IMAGE_FILE"
 fi
 
+# Check if the provided path is a directory
+if [ -d "$IMAGE_FILE" ]; then
+    # Search for .rom or .bin files in the directory
+    IMAGE_FILE=$(find "$IMAGE_FILE" -type f \( -name "*.rom" -o -name "*.bin" \) | head -n 1)
+    if [ -z "$IMAGE_FILE" ]; then
+        echo "No .rom or .bin file found in the specified directory."
+        exit 1
+    fi
+else
+    # Check if the file format is either .rom or .bin
+    if [[ "$IMAGE_FILE" != *.rom && "$IMAGE_FILE" != *.bin ]]; then
+        echo "Invalid file format. The image file must be a .rom or .bin file."
+        exit 1
+    fi
+fi
+
 GPIOCHIP=816
 GPIOB6=$((${GPIOCHIP} + 14))
 GPIOD3=$((${GPIOCHIP} + 27))

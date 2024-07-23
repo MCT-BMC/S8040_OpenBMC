@@ -1,0 +1,11 @@
+[Unit]
+Description=Bind Hwmon
+After=xyz.openbmc_project.ObjectMapper.service phosphor-ipmi-host.service
+
+[Service]
+ExecStart=/usr/bin/bind-hwmon.sh
+Type=oneshot
+RemainAfterExit=Yes
+
+[Install]
+WantedBy=multi-user.target

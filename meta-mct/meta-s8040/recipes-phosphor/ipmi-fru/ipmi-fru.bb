@@ -5,7 +5,6 @@ SUMMARY = "FRU Write IPMI Command"
 TARGET_CC_ARCH += "${LDFLAGS}"
 
 SRC_URI += " \
-            file://ipmi-fru.hpp \
             file://ipmi-fru.cpp \
             file://Makefile \
            "

@@ -36,6 +36,10 @@ As an example target S8040
 . setup s8040
 ```
 
+* Supported platforms (case sensitive)
+  * s8040
+  * s8047
+
 ### 4) Build
 
 ```

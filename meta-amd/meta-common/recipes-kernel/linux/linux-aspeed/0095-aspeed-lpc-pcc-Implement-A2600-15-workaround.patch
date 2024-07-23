@@ -1,0 +1,71 @@
+From 78a06392d1b1b24c00c868fef2a64c6e39a33c1e Mon Sep 17 00:00:00 2001
+From: "austin.su" <austin.su@insyde.com>
+Date: Tue, 25 Jun 2024 14:15:00 +0800
+Subject: [PATCH] aspeed: lpc-pcc: Implement A2600-15 workaround
+
+- Add A2600-15 DTS property
+- Allow 2 or 4 bytes continuous I/O address range
+- Remove dedicated PCC memory region
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 11 +++--------
+ drivers/soc/aspeed/aspeed-lpc-pcc.c           |  8 ++++----
+ 2 files changed, 7 insertions(+), 12 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 7a3bfd402852..3c5871517eb8 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -58,11 +58,6 @@ bmc_dev_memory: bmc_dev_memory {
+                        compatible = "shared-dma-pool";
+                        no-map;
+                 };
+-
+-		pcc_memory: pccbuffer {
+-			no-map;
+-			reg = <0xE0000000 0x00001000>; /* 4K */
+-		};
+ 	};
+ 
+     adc0: adc@1e6e9000 {
+@@ -701,12 +696,12 @@ &lpc_ctrl {
+ };
+ 
+ &lpc_pcc {
+-	port-addr = <0x80>;
+ 	dma-mode;
+-	memory-region = <&pcc_memory>;
+ 	rec-mode = <0x1>;
++	port-addr = <0x80>;
+ 	port-addr-hbits-select = <0x1>;
+-	port-addr-xbits = <0x3>;
++	port-addr-xbits = <0x1>;
++	A2600-15;
+ 	status = "okay";
+ };
+ 
+diff --git a/drivers/soc/aspeed/aspeed-lpc-pcc.c b/drivers/soc/aspeed/aspeed-lpc-pcc.c
+index 05f410fa2166..dd9b3910d657 100644
+--- a/drivers/soc/aspeed/aspeed-lpc-pcc.c
++++ b/drivers/soc/aspeed/aspeed-lpc-pcc.c
+@@ -52,7 +52,7 @@ static DEFINE_IDA(aspeed_pcc_ida);
+ #define PCCR3	0x13c
+ #define   PCCR3_FIFO_DATA_MASK		GENMASK(7, 0)
+ 
+-#define PCC_DMA_BUFSZ	(256 * SZ_1K)
++#define PCC_DMA_BUFSZ	(4 * SZ_1K)
+ 
+ enum pcc_fifo_threshold {
+ 	PCC_FIFO_THR_1_BYTE,
+@@ -239,9 +239,9 @@ static int aspeed_a2600_15(struct aspeed_pcc *pcc, struct device *dev)
+ 		}
+ 	}
+ 
+-	/* abort if port is not 4-bytes continuous range */
+-	if (pcc->port_xbits != 0x3) {
+-		dev_err(dev, "A2600-15 should be applied on 4-bytes continuous I/O address range\n");
++	/* abort if port is not 4 or 2 bytes continuous range */
++	if (pcc->port_xbits != 0x1 && pcc->port_xbits != 0x3) {
++		dev_err(dev, "Invalid port-addr-xbits value: 0x%x. Must be 0x1 (2 bytes) or 0x3 (4 bytes)\n", pcc->port_xbits);
+ 		return -EINVAL;
+ 	}
+ 

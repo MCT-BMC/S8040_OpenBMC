@@ -13,39 +13,35 @@
 #include <stdexcept>
 #include <string_view>
 
-#include "ipmi-fru.hpp"
-
 namespace ipmi {
 
 namespace storage {
-static std::map<uint8_t, std::string> fruIDMap = {
-    {0, "/sys/bus/i2c/devices/i2c-1/1-0050/eeprom"}};
-std::unique_ptr<phosphor::Timer> writeTimer = nullptr;
-constexpr auto syncTimerTimeOut = 8;
+std::map<uint8_t, std::string> __attribute__((init_priority(101)))
+fruIDMap = {{0, "/sys/bus/i2c/devices/i2c-1/1-0050/eeprom"}};
+
+std::map<uint8_t, std::vector<uint8_t>> fruCache
+    __attribute__((init_priority(101)));
+
+constexpr uint16_t FRUMAXSIZE = 0x8000;
+
 void register_netfn_storage_functions() __attribute__((constructor));
 
-void syncFruIfRunning() {
+void cacheFruData() {
+  for (auto fruInfo : fruIDMap) {
+    std::ifstream fruFile(fruInfo.second, std::ios::binary);
+    if (!fruFile) {
+      continue;
+    }
+    fruFile.seekg(0, std::ios::end);
+    std::streampos fileSize = fruFile.tellg();
+    fruFile.seekg(0, std::ios::beg);
 
-  writeTimer->start(std::chrono::duration_cast<std::chrono::microseconds>(
-      std::chrono::seconds(syncTimerTimeOut)));
-}
-
-bool syncFru() {
-  try {
-    std::shared_ptr<sdbusplus::asio::connection> dbus = getSdBus();
-    auto method = dbus->new_method_call(
-        "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
-        "org.freedesktop.systemd1.Manager", "StartUnit");
-    method.append("obmc-read-eeprom@system-chassis-motherboard.service",
-                  "replace");
-    dbus->call_noreply(method);
-  } catch (const std::exception &e) {
-    return false;
+    fruCache[fruInfo.first].resize(fileSize);
+    fruFile.read(reinterpret_cast<char *>(fruCache[fruInfo.first].data()),
+                 fileSize);
+    fruCache[fruInfo.first].resize(FRUMAXSIZE);
   }
-  return true;
 }
-
-void createTimer() { writeTimer = std::make_unique<phosphor::Timer>(syncFru); }
 
 /** @brief implements the write FRU data command
  *  @param fruDeviceId        - FRU Device ID
@@ -63,7 +59,8 @@ ipmiStorageWriteFruData(ipmi::Context::ptr ctx, uint8_t fruDeviceId,
   constexpr uint8_t fruHeaderCheckSumOffset = 7;
   uint8_t countWritten = 0;
 
-  if (fruIDMap.find(fruDeviceId) == fruIDMap.end() || fruDeviceId == 0xFF) {
+  if (fruIDMap.find(fruDeviceId) == fruIDMap.end() || fruDeviceId == 0xFF ||
+      fruCache.find(fruDeviceId) == fruCache.end()) {
     return ipmi::responseInvalidFieldRequest();
   }
 
@@ -76,6 +73,13 @@ ipmiStorageWriteFruData(ipmi::Context::ptr ctx, uint8_t fruDeviceId,
       zsum += dataToWrite[index];
     dataToWrite[fruHeaderCheckSumOffset] = -(zsum % 256);
   }
+
+  if ((fruInventoryOffset + dataToWrite.size()) > FRUMAXSIZE) {
+    return ipmi::responseParmOutOfRange();
+  }
+
+  std::copy(dataToWrite.begin(), dataToWrite.end(),
+            fruCache[fruDeviceId].begin() + fruInventoryOffset);
 
   std::ofstream fruFile(fruIDMap[fruDeviceId],
                         std::ios::binary | std::ios::out);
@@ -90,20 +94,86 @@ ipmiStorageWriteFruData(ipmi::Context::ptr ctx, uint8_t fruDeviceId,
 
   countWritten = std::min(dataToWrite.size(), static_cast<size_t>(0xFF));
 
-  if (fruDeviceId == 0) {
-    syncFruIfRunning();
-  }
-
   return ipmi::responseSuccess(countWritten);
 }
 
-void register_netfn_storage_functions() {
+/**@brief implements the Read FRU Data command
+ * @param fruDeviceId - FRU device ID. FFh = reserved
+ * @param offset      - FRU inventory offset to read
+ * @param readCount   - count to read
+ *
+ * @return IPMI completion code plus response data
+ * - returnCount - response data count.
+ * - data        -  response data
+ */
+ipmi::RspType<uint8_t,              // count returned
+              std::vector<uint8_t>> // FRU data
+ipmiStorageReadFruData(uint8_t fruDeviceId, uint16_t offset,
+                       uint8_t readCount) {
+  if (fruDeviceId == 0xFF) {
+    return ipmi::responseInvalidFieldRequest();
+  }
 
-  createTimer();
+  auto iter = fruIDMap.find(fruDeviceId);
+  if (iter == fruIDMap.end()) {
+    return ipmi::responseSensorInvalid();
+  }
+
+  if (fruCache.find(fruDeviceId) == fruCache.end()) {
+    return ipmi::responseSensorInvalid();
+  }
+
+  uint8_t returnCount;
+  if ((offset + readCount) <= FRUMAXSIZE) {
+    returnCount = readCount;
+  } else {
+    returnCount = FRUMAXSIZE - offset;
+  }
+
+  std::vector<uint8_t> fruData(
+      (fruCache[fruDeviceId].begin() + offset),
+      (fruCache[fruDeviceId].begin() + offset + returnCount));
+  return ipmi::responseSuccess(returnCount, fruData);
+}
+
+/** @brief implements the get FRU Inventory Area Info command
+ *
+ *  @returns IPMI completion code plus response data
+ *   - FRU Inventory area size in bytes,
+ *   - access bit
+ **/
+ipmi::RspType<uint16_t, // FRU Inventory area size in bytes,
+              uint8_t   // access size (bytes / words)
+              >
+ipmiStorageGetFruInvAreaInfo(uint8_t fruID) {
+
+  auto iter = fruIDMap.find(fruID);
+  if (iter == fruIDMap.end()) {
+    return ipmi::responseSensorInvalid();
+  }
+
+  if (!std::filesystem::exists(iter->second)) {
+    return ipmi::responseSensorInvalid();
+  }
+
+  return ipmi::responseSuccess(static_cast<uint16_t>(FRUMAXSIZE),
+                               static_cast<uint8_t>(0));
+}
+
+void register_netfn_storage_functions() {
+  cacheFruData();
   // <WRITE FRU Data>
   ipmi::registerHandler(ipmi::prioMax, ipmi::netFnStorage,
                         ipmi::storage::cmdWriteFruData,
                         ipmi::Privilege::Operator, ipmiStorageWriteFruData);
+  // <READ FRU Data>
+  ipmi::registerHandler(ipmi::prioMax, ipmi::netFnStorage,
+                        ipmi::storage::cmdReadFruData,
+                        ipmi::Privilege::Operator, ipmiStorageReadFruData);
+  // <Get FRU Inventory Area Info>
+  ipmi::registerHandler(ipmi::prioMax, ipmi::netFnStorage,
+                        ipmi::storage::cmdGetFruInventoryAreaInfo,
+                        ipmi::Privilege::User, ipmiStorageGetFruInvAreaInfo);
 }
 } // namespace storage
 } // namespace ipmi

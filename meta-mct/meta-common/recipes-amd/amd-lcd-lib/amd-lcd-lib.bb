@@ -8,8 +8,7 @@ LICENSE = "CLOSED"
 DEPENDS += "i2c-tools"
 
 SRC_URI = "git://git@github.com:/AMDESE/amd-lcd-lib.git;protocol=https"
-#SRCREV = "${AUTOREV}"
-SRCREV = "c3d79cbc0a5b43a9c5270471c3c33bcd86736df1"
+SRCREV = "${AUTOREV}"
 
 S="${WORKDIR}/git"
 

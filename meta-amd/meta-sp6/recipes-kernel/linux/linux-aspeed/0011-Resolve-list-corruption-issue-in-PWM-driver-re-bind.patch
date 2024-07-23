@@ -1,0 +1,34 @@
+From b5fdb6069232bade6ef7d896578f4ef1b4868e81 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Wed, 10 Jul 2024 11:30:03 +0800
+Subject: [PATCH] Resolve list corruption issue in PWM driver re-bind
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ drivers/hwmon/aspeed-g6-pwm-tacho.c | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/drivers/hwmon/aspeed-g6-pwm-tacho.c b/drivers/hwmon/aspeed-g6-pwm-tacho.c
+index bcf5aeaa564a..8552f7b6e7ed 100755
+--- a/drivers/hwmon/aspeed-g6-pwm-tacho.c
++++ b/drivers/hwmon/aspeed-g6-pwm-tacho.c
+@@ -1123,16 +1123,9 @@ static int aspeed_pwm_tachometer_probe(struct platform_device *pdev)
+ 
+ 	priv->chip.dev = &pdev->dev;
+ 	priv->chip.ops = &aspeed_pwm_ops;
+-	priv->chip.base = -1;
+-	priv->chip.npwm = 16;
+ 	priv->chip.of_xlate = of_pwm_xlate_with_flags;
+-	priv->chip.of_pwm_n_cells = 3;
+ 
+ 	ret = pwmchip_add(&priv->chip);
+-	if (ret < 0) {
+-		dev_err(dev, "failed to register PWM chip\n");
+-		return ret;
+-	}
+ 
+ 	priv->groups[0] = &pwm_dev_group;
+ 	priv->groups[1] = &fan_dev_group;
+-- 
+2.45.2
+
