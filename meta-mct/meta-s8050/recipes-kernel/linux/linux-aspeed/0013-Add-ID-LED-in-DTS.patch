@@ -1,0 +1,24 @@
+From 01e67cdec31cc657d8107d8df072c13dc77f8f4d Mon Sep 17 00:00:00 2001
+From: "edward.hc.hsu" <edward.hc.hsu@mic.com.tw>
+Date: Thu, 8 Aug 2024 13:06:50 +0800
+Subject: [PATCH] Add ID LED in DTS
+
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 6df8808905f2..ba750a06bab5 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -33,6 +33,10 @@ heartbeat {
+                         active-delay = <250>;
+                         inactive-delay = <250>;
+                 };
++
++                identify {
++                        gpios = <&gpio0 ASPEED_GPIO(B, 7) GPIO_ACTIVE_LOW>;
++                };
+         };
+ 
+ 	memory@80000000 {

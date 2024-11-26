@@ -1,0 +1,75 @@
+From 366f9936d43ce268a5a8603b3db67df3b721c91f Mon Sep 17 00:00:00 2001
+From: John Chung <john.chung@mic.com.tw>
+Date: Wed, 25 Oct 2023 06:40:59 +0000
+Subject: [PATCH 2/2] MCT: Set specified GPIO setting for using platform
+
+Update GPIO setting for YAAP using.
+
+Signed-off-by: John Chung <john.chung@mic.com.tw>
+---
+ Source/Linux/bmc/hw/hdt_hw.cpp    | 8 ++++----
+ Source/Linux/bmc/hw/system_hw.cpp | 4 ++--
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/Source/Linux/bmc/hw/hdt_hw.cpp b/Source/Linux/bmc/hw/hdt_hw.cpp
+index 2d39aea..b9642cd 100644
+--- a/Source/Linux/bmc/hw/hdt_hw.cpp
++++ b/Source/Linux/bmc/hw/hdt_hw.cpp
+@@ -76,13 +76,13 @@ int JTAG_get_idcode (int fd, int device)
+     if(device)
+     {
+         //select jtag mux setting '0'
+-        setGPIOValue(jtagMuxSName, 0);
++        setGPIOValue(jtagMuxSName, 1);
+         setGPIOValue(jtagMuxOEName, 0);
+         setGPIOValue(hdtSelName, 1);
+ 
+     }else{
+         //select jtag mux setting '1'
+-        setGPIOValue(jtagMuxSName, 1);
++        setGPIOValue(jtagMuxSName, 0);
+         setGPIOValue(jtagMuxOEName, 0);
+     }
+     mode.feature = JTAG_XFER_MODE;
+@@ -125,7 +125,7 @@ int JTAG_get_idcode (int fd, int device)
+     DEBUG_PRINT(DEBUG_INFO, "%s_IDCODE=%08x \n",device?"CPU":"FPGA",idcode);
+ 
+     //select jtag mux setting '1',default
+-    setGPIOValue(jtagMuxSName, 1);
++    setGPIOValue(jtagMuxSName, 0);
+     setGPIOValue(jtagMuxOEName, 1);
+     setGPIOValue(hdtSelName, 0);
+ 
+@@ -140,7 +140,7 @@ bmc::HdtHw::HdtHw(int driver)
+     m_clksPerUsec = ((24750000 + 500000) / 1000000); // 25
+ 
+     //HDT Conn and ARM Debug Conn (default) => MUX_S = High, MUX_OE = High, HDT_SEL = low
+-    setGPIOValue(jtagMuxSName, 1);
++    setGPIOValue(jtagMuxSName, 0);
+     setGPIOValue(jtagMuxOEName, 1);
+     setGPIOValue(hdtSelName, 0);
+ 
+diff --git a/Source/Linux/bmc/hw/system_hw.cpp b/Source/Linux/bmc/hw/system_hw.cpp
+index 71d565a..f833579 100644
+--- a/Source/Linux/bmc/hw/system_hw.cpp
++++ b/Source/Linux/bmc/hw/system_hw.cpp
+@@ -173,14 +173,14 @@ uint32_t bmc::SystemHw::configMux(bool enable)
+    if(enable)
+    {
+        //make high for BMC HDT
+-       setGPIOValue(jtagMuxSName, 0);
++       setGPIOValue(jtagMuxSName, 1);
+        setGPIOValue(jtagMuxOEName, 0);
+        setGPIOValue(hdtSelName, 1);
+    }
+    else
+    {
+        //make low for external Wombat
+-       setGPIOValue(jtagMuxSName, 1);
++       setGPIOValue(jtagMuxSName, 0);
+        setGPIOValue(jtagMuxOEName, 1);
+        setGPIOValue(hdtSelName, 0);
+     }
+-- 
+2.25.1
+

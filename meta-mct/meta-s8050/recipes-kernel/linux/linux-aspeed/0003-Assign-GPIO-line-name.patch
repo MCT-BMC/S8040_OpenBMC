@@ -1,0 +1,98 @@
+From 76cf9b45d3b267a599636e079ffb3ee8be2d1da6 Mon Sep 17 00:00:00 2001
+From: "alex.huang" <alex.huang@insyde.com>
+Date: Wed, 10 Apr 2024 14:39:04 +0800
+Subject: [PATCH 3/3] Assign GPIO line name
+
+Signed-off-by: alex.huang <alex.huang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 74 +++++++++----------
+ 1 file changed, 37 insertions(+), 37 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 5d6a17c5b896..9ec700594c26 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -542,43 +542,43 @@ &espi_mmbi {
+ };
+ 
+ &gpio0 {
+-	gpio-line-names =
+-	/*A0-A7*/	"","","","","","","","",
+-	/*B0-B7*/	"","","","","MON_POST_COMPLETE","P0_PRESENT_L","","",
+-	/*C0-C7*/	"","","","","","","","",
+-	/*D0-D7*/	"","","","","","","","",
+-	/*E0-E7*/	"","","","","","","","",
+-	/*F0-F7*/	"","","","","","","","",
+-	/*G0-G7*/	"","ASSERT_BMC_READY","","","","","","",
+-	/*H0-H7*/	"","","ASSERT_SOC_RST_BTN_L","","","","","",
+-	/*I0-I7*/	"","","","","","","","P0_I3C_APML_ALERT_L",
+-	/*J0-J7*/	"","","","","","","","",
+-	/*K0-K7*/	"","","","","","","","",
+-	/*L0-L7*/	"","","","","","","","",
+-	/*M0-M7*/	"","","","","","","","",
+-	/*N0-N7*/	"","","","","","","PSP_SOFT_FUSE_NOTIFY","",
+-	/*O0-O7*/	"","","HDT_SEL","HDT_XTRIG5","HDT_XTRIG6","JTAG_TRST_N","","",
+-	/*P0-P7*/	"MON_RST_BTN_L","ASSERT_RST_BTN_L","MON_PWR_BTN_L","ASSERT_PWR_BTN_L","","ASSERT_NMI_BTN_L","MON_PWR_GOOD","",
+-	/*Q0-Q7*/	"","","HDT_DBREQ_L","","BIOS_SPD_MUX_CTRL_RELEASED_L","","","",
+-	/*R0-R7*/	"","","","","","","","",
+-	/*S0-S7*/	"","","","","P1_DIMM_AF_ERROR","P1_DIMM_GL_ERROR","P0_DIMM_AF_ERROR","P0_DIMM_GL_ERROR",
+-	/*T0-T7*/	"","","","","","","","",
+-	/*U0-U7*/	"","","","","P1_I3C_APML_ALERT_L","","","",
+-	/*V0-V7*/	"","","","","","","","",
+-	/*W0-W7*/	"","","","","","","","",
+-	/*X0-X7*/	"","","","","","","","",
+-	/*Y0-Y7*/	"","","","","","","","",
+-	/*Z0-Z7*/	"","","","","","","","",
+-	/*AA0-AA7*/	"","","","","","","","",
+-	/*AB0-AB7*/	"","","","","","","","",
+-	/*AC0-AC7*/	"","","","","","","","";
+-
+-	gpio49 {
+-        gpio-hog;
+-        gpios = <ASPEED_GPIO(G, 1) GPIO_ACTIVE_LOW>;
+-        output-low;
+-        line-name = "gpio-hog-1";
+-    };
++        gpio-line-names =
++        /*A0-A7*/   "BMC_PE_SMB_SW_BIT0","BMC_PE_SMB_SW_BIT1","CPU0_MEMTRIP_R_L","CPU1_MEMTRIP_R_L","SMB_CPU_PIROM_PU_SCL","SMB_CPU_PIROM_PU_SDA","SMB_IPMB_PU_LVC3_SCL","SMB_IPMB_PU_LVC3_SDA",
++        /*B0-B7*/   "PCH_ADR_TRIGGER_L","SPI_BUS_1","SPI_BUS_2","PECI_BMC_PCH_SEL","P0_FIVR_FAULT_L","P1_FIVR_FAULT_L","BMCINIT","BMC_IDLED_ON_L",
++        /*C0-C7*/   "BMC_P0_VRHOT_L","BMC_P1_VRHOT_L","BMC_P0_MEM_HOTIN_L","BMC_P1_MEM_HOTIN_L","BMC_P1_PROCHOT_L","BMC_P0_PROCHOT_L","XDP_SYSPWROK","BMC_CPU_PWR_DEBUG_R_L",
++        /*D0-D7*/   "CPU0_SKTOCC_L","CPU1_SKTOCC_L","PCH_SMI_L","CPU_PIROM_SMB_WP","FP_BMC_RST_BTN_L","NCSI_BMC_MAC1_TXCTL","NCSI_BMC_MAC1_TXD0","NCSI_BMC_MAC1_TXD1",
++        /*E0-E7*/   "","XDP_PRESENT_L","NCSI_BMC_MAC1_CLKIN50M","RGMII4RXCTL_GPIOE3","NCSI_BMC_MAC1_RXD0","NCSI_BMC_MAC1_RXD1","NCSI_BMC_MAC1_CRSDV","NCSI_BMC_MAC1_RXER",
++        /*F0-F7*/   "","","","","","","","",
++        /*G0-G7*/   "BMC_JTAG_XDP_SEL","ASSERT_BMC_READY","AST_HW_FAULT_L","AST_SYS_FAULT_L","BMC_IDBTN_IN_OUT_L","ATX_PWROK","","BMC_PRESENT_L",
++        /*H0-H7*/   "","","","","PCH_PLD_PLTRST_L","CPU_CATERR_BMC_L","BMC_PCH_HOT_L","BMC_CLR_CMOS_L",
++        /*I0-I7*/   "JTAG_ASD_NTRST_L","JTAG_ASD_TDI","JTAG_ASD_TCK","JTAG_ASD_TMS","JTAG_ASD_TDO","SIO_PWR_BTN_OUT_L","SIO_PWR_BTN_L","SCI_LPC_L",
++        /*J0-J7*/   "SMB_PU_LVC3_SCL_1","SMB_PU_LVC3_SDA_1","SMB_PU_LVC3_SCL_2","SMB_PU_LVC3_SCL_2","SMB_PU_LVC3_SCL_3","SMB_PU_LVC3_SCL_3","SMB_PMBUS_SML1_PU_LVC3_SCL","SMB_PMBUS_SML1_PU_LVC3_SDA",
++        /*K0-K7*/   "SMB_PU_LVC3_SCL_5","SMB_PU_LVC3_SDA_5","SMB_SMLINK0_PU_LVC3_SCL","SMB_SMLINK0_PU_LVC3_SDA","SMB_PU_LVC3_SCL_7","SMB_PU_LVC3_SDA_7","SMB_PU_LVC3_SCL_8","SMB_PU_LVC3_SDA_8",
++        /*L0-L7*/   "JTAG_BMC_TCK_SEL","BMC_JTAG_CTL_R","SMB_HOST_STBY_PU_LVC3_SCL","SMB_HOST_STBY_PU_LVC3_SDA","DBP_ASD_PREQ_L","","VGA_HSYNC","VGA_VSYNC",
++        /*M0-M7*/   "COM_CTS1","COM_DCD1","COM_DSR1","COM_RI1","COM_DTR1","COM_RTS1","COM_TXD1","COM_RXD1",
++        /*N0-N7*/   "COM_CTS2","COM_DCD2","COM_DSR2","COM_RI2","COM_DTR2","COM_RTS2","COM_TXD2","COM_RXD2",
++        /*O0-O7*/   "FAN_PWM0","FAN_PWM1","FAN_PWM2","FAN_PWM3","FAN_PWM4","FAN_PWM5","BMC_P01_PROCHOT_L","FAN_PWM7",
++        /*P0-P7*/   "RST_BTN_IN_L","RST_BTN_OUT_L","PWR_BTN_IN_L","PWR_BTN_OUT_L","PASSTH_IN","PASSTH_OUT","SPEAKER_PWM","BMC_HB_LED_L",
++        /*Q0-Q7*/   "FAN_TACH0","FAN_TACH1","FAN_TACH2","FAN_TACH3","FAN_TACH4","FAN_TACH5","FAN_TACH6","FAN_TACH7",
++        /*R0-R7*/   "FAN_TACH8","FAN_TACH9","FAN_TACH10","FAN_TACH11","FAN_TACH12","FAN_TACH13","FAN_TACH14","FAN_TACH15",
++        /*S0-S7*/   "RGMII_RMM4_MDC1","RGMII_RMM4_MDIO1","PE_WAKE_PCH_L","PSU_SMB_ALERT_BMC_L","PSMI_PSU_ALERT_L","A_P3V_BAT_SCALED_EN","FM_ASD_EN_DET","BMC_PME_L",
++        /*T0-T7*/   "","","","","","","","",
++        /*U0-U7*/   "","","","","","","","",
++        /*V0-V7*/   "SIO_SLPS3_L","SIO_SLPS4_L","SIO_PWREQ_L","SIO_ONCTL_L","SIOPWRGD","","SYS_PWROK_BUF","BMC_LPC_SMI_L",
++        /*W0-W7*/   "LPC_ESPI_IO0","LPC_ESPI_IO1","LPC_ESPI_IO2","LPC_ESPI_IO3","LPC_ESPI_CLK","LPCFRAME_ESPI_CS0_L","LPC_SIRQ_ESPI_ALERT_L","LPC_ESPI_RST_L",
++        /*X0-X7*/   "FM_PMBUS_ALERT_B_EN","P0_P1_THERMTRIP_L","FM_BIOS_POST_CMPLT_L","PCH_BMC_SMB_EN_L","BMC_P0_MEM_HOTOUT_L","BMC_P1_MEM_HOTOUT_L","BMC_ME_OVERRIDE_L","CPU_ERR2_BMC_L",
++        /*Y0-Y7*/   "DBP_ASD_PRDY_L","IRQ_SML0_ALERT_L","BMC_WDT_RST3_P","IRQ_SML1_PMBUS_ALERT_L","SPI_BOOT_IO2","SPI_BOOT_IO3","SPI_ABR","SPI_BOOT_WP_L",
++        /*Z0-Z7*/   "BMC_TRIGGER_SMI","BIOS_POST_END_L","BIOS_POST_PEI_L","SPI1_CK","SPI1_MOSI","SPI1_MISO","BMC_2WIRE_SW_H","PSU_AC_LOSS",
++        /*AA0-AA7*/   "","","","","","","","",
++        /*AB0-AB7*/   "","","","","","","","",
++        /*AC0-AC7*/   "","","","","","","","";
++
++        gpio49 {
++            gpio-hog;
++            gpios = <ASPEED_GPIO(G, 1) GPIO_ACTIVE_LOW>;
++            output-low;
++            line-name = "ASSERT_BMC_READY";
++        };
+ };
+ 
+ &jtag1 {
+-- 
+2.25.1
+

@@ -1,0 +1,57 @@
+From 09dd500ac70a95abfb798f34eb0029c539d10350 Mon Sep 17 00:00:00 2001
+From: Peter Lin <peter.lin@insyde.com>
+Date: Thu, 9 May 2024 14:54:46 +0800
+Subject: [PATCH] [RM#131314][Linux] Enable NCSI Feature
+
+Tag#: 02.54.23.0063
+Issue#: IB19670072
+Severity: Normal
+Category: Kerenl
+Symptom: N/A
+RootCause: N/A
+Description: As title
+Solution: N/A
+SolutionDependency: N/A
+Reviewer: Gerrit
+
+Signed-off-by: Peter Lin <peter.lin@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 647b7b95c603..6edb8fd2f138 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -14,8 +14,8 @@
+ 
+ 	aliases {
+ 		serial4 = &uart5;
+-		ethernet0 = &mac3;
+-		ethernet1 = &mac2;
++		ethernet0 = &mac0;
++		ethernet1 = &mac3;
+ 	};
+ 
+ 	chosen {
+@@ -121,13 +121,14 @@
+ 
+ &mac3 {
+ 	status = "okay";
++	phy-mode = "rmii";
++	use-ncsi;
++	#clocks = <&syscon ASPEED_CLK_GATE_MAC4CLK>, <&syscon ASPEED_CLK_MAC4RCLK>;
++	#clock-names = "MACCLK", "RCLK";
+ 	pinctrl-names = "default";
+ 	pinctrl-0 = <&pinctrl_rmii4_default>;
+-	use-ncsi;
+ };
+ 
+-
+-
+ &fmc {
+ 	status = "okay";
+ 	fmc-spi-user-mode;
+-- 
+2.17.1
+

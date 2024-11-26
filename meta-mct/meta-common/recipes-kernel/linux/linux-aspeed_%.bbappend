@@ -95,4 +95,5 @@ SRC_URI += "file://amd-bmc-baseline.cfg \
             file://0093-RM-132276-FRU-Add-EEPROM-config-in-dts.patch \
             file://0094-RM-133218-BIOS-POST-Code-Fix-BIOS-POST-code-0xff-issue.patch \
             file://0095-aspeed-lpc-pcc-Implement-A2600-15-workaround.patch \
+            file://0096-enable-jtag0-and-jtag1-in-dev-directory.patch \
            " 

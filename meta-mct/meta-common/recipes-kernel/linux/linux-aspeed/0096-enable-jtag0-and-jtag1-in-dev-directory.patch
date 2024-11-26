@@ -1,0 +1,30 @@
+From 6a1ea097360ea6127b020f0f0f340d766cb7f346 Mon Sep 17 00:00:00 2001
+From: "edward.hc.hsu" <edward.hc.hsu@mic.com.tw>
+Date: Wed, 19 Jun 2024 11:29:26 +0800
+Subject: [PATCH] enable jtag0 and jtag1 in dev directory
+
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index 7a3bfd402852..84da5f3885e8 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -683,8 +683,12 @@ gpio149 {
+         };
+ };
+ 
++&jtag0 {
++	status = "okay";
++};
++
+ &jtag1 {
+-	status = "disabled";
++	status = "okay";
+ };
+ 
+ &video {
+-- 
+2.25.1
+

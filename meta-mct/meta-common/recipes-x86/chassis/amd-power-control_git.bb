@@ -1,8 +1,10 @@
 SUMMARY = "Chassis Power Control service for AMD platforms"
 DESCRIPTION = "Chassis Power Control service for AMD platforms"
 
-SRC_URI = "git://git@github.com/AMDESE/amd-power-control.git;branch=integ;protocol=https"
-SRCREV = "${AUTOREV}"
+#SRC_URI = "git://git@github.com/AMDESE/amd-power-control.git;branch=integ;protocol=https"
+SRC_URI = "git://git@micgitlab1-ssh.mic.com.tw:1022/grdc/rdc5/rdd2/bmc/openbmc/amd/amd-power-control.git;branch=integ;protocol=ssh"
+#SRCREV = "${AUTOREV}"
+SRCREV = "b15942d579df0292fe170165bb1910f620d0af20"
 
 PV = "1.0+git${SRCPV}"
 

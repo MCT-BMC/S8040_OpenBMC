@@ -1,0 +1,10 @@
+[Unit]
+Description=YAAP for AMD HDT
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/yaapd
+SyslogIdentifier=yaap
+
+[Install]
+WantedBy={SYSTEMD_DEFAULT_TARGET}

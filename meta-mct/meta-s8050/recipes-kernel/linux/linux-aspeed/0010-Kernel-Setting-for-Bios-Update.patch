@@ -1,0 +1,61 @@
+From cf7ef3062d24613241a5f2b01d6b5f1734f313f4 Mon Sep 17 00:00:00 2001
+From: "richard.yang" <richard.yang@insyde.com>
+Date: Thu, 20 Jun 2024 15:38:12 +0800
+Subject: [PATCH] Enable spi1 in dts for bios update, remove gpio49 setting for
+ switch spi to bmc
+
+Signed-off-by: richard.yang <richard.yang@insyde.com>
+---
+ arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts | 29 ++++++++-----------
+ 1 file changed, 12 insertions(+), 17 deletions(-)
+
+diff --git a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+index d88aef0a902d..bfda4c3936e3 100644
+--- a/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
++++ b/arch/arm/boot/dts/aspeed-bmc-amd-cinnabar.dts
+@@ -143,17 +143,18 @@ flash@0 {
+ };
+ 
+ &spi1 {
+-	status = "disabled";
+-	pinctrl-names = "default";
+-	pinctrl-0 = <&pinctrl_spi1_default &pinctrl_qspi1_default>;
+-	fmc-spi-user-mode;
+-	compatible = "aspeed,ast2600-spi";
+-
+-	flash@0 {
+-		compatible = "jedec,spi-nor";
+-		label = "pnor";
+-		status = "okay";
+-	};
++        status = "okay";
++        pinctrl-names = "default";
++        pinctrl-0 = <&pinctrl_spi1_default>;
++        fmc-spi-user-mode;
++        compatible = "aspeed,ast2600-spi";
++
++        flash@0 {
++                compatible = "jedec,spi-nor";
++                label = "pnor";
++                status = "okay";
++                m25p,fast-read;
++        };
+ 
+ };
+ 
+@@ -665,12 +666,6 @@ &gpio0 {
+         /*AB0-AB7*/   "","","","","","","","",
+         /*AC0-AC7*/   "","","","","","","","";
+ 
+-        gpio49 {
+-            gpio-hog;
+-            gpios = <ASPEED_GPIO(G, 1) GPIO_ACTIVE_LOW>;
+-            output-low;
+-            line-name = "ASSERT_BMC_READY";
+-        };
+         gpio149 {
+             gpio-hog;
+             gpios = <ASPEED_GPIO(S, 5) GPIO_ACTIVE_HIGH>;
+-- 
+2.45.1
+

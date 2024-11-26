@@ -1,0 +1,74 @@
+From 1f2deb2f9979d3c68365d983a44d1cc80a4cb273 Mon Sep 17 00:00:00 2001
+From: "edward.hc.hsu" <edward.hc.hsu@mic.com.tw>
+Date: Tue, 19 Nov 2024 09:07:26 +0800
+Subject: [PATCH] Implement ipmit get system GUID
+
+---
+ apphandler.cpp | 40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/apphandler.cpp b/apphandler.cpp
+index f8569af..9c1cd6e 100644
+--- a/apphandler.cpp
++++ b/apphandler.cpp
+@@ -19,6 +19,8 @@
+ #include <cstdint>
+ #include <filesystem>
+ #include <fstream>
++#include <iostream>
++#include <iomanip>
+ #include <ipmid/api.hpp>
+ #include <ipmid/sessiondef.hpp>
+ #include <ipmid/sessionhelper.hpp>
+@@ -787,6 +789,7 @@ auto ipmiAppGetBtCapabilities()
+                                  outputBufferSize, transactionTime, nrRetries);
+ }
+ 
++#if 0
+ auto ipmiAppGetSystemGuid() -> ipmi::RspType<std::array<uint8_t, 16>>
+ {
+     static constexpr auto bmcInterface =
+@@ -832,6 +835,43 @@ auto ipmiAppGetSystemGuid() -> ipmi::RspType<std::array<uint8_t, 16>>
+     return ipmi::responseSuccess(uuid);
+ }
+ 
++#else
++
++auto ipmiAppGetSystemGuid() -> ipmi::RspType<std::array<uint8_t, 16>>
++{
++    std::string filePath = "/sys/bus/i2c/devices/1-0050/eeprom";
++    std::ifstream inputFile(filePath, std::ios::binary);
++
++    if (!inputFile.is_open()) {
++        return ipmi::responseUnspecifiedError();
++    }
++
++    #define UUID_LEN 16
++    std::array<uint8_t, UUID_LEN> uuid;
++    char byte;
++    int i = 0;
++
++    // Go to the offset of System GUID in the FRU.
++    const int sysGuidOffset = 0x2020;
++    inputFile.seekg(sysGuidOffset);
++
++    while (inputFile.get(byte)) {
++        uuid[i] = static_cast<uint8_t>(byte);
++
++        ++i;
++        if (i >= UUID_LEN) {
++            break;
++        }
++    }
++
++    inputFile.close();
++
++    return ipmi::responseSuccess(uuid);
++}
++
++#endif
++
++
+ /**
+  * @brief set the session state as teardown
+  *

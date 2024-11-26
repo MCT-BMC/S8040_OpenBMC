@@ -1,0 +1,45 @@
+From b1b785588e14b9df1768b816c9c04312aedfa9cb Mon Sep 17 00:00:00 2001
+From: John Chung <john.chung@mic.com.tw>
+Date: Wed, 25 Oct 2023 06:39:00 +0000
+Subject: [PATCH 1/2] Revert "bmc: disable unsafe yaapPrivate class"
+
+This reverts commit 4d612d44570e79a41a545f516c233ffc3d0671d0.
+
+Signed-off-by: John Chung <john.chung@mic.com.tw>
+---
+ Source/Linux/bmc/main.cpp | 6 +-----
+ Source/Shared/meson.build | 1 +
+ 2 files changed, 2 insertions(+), 5 deletions(-)
+
+diff --git a/Source/Linux/bmc/main.cpp b/Source/Linux/bmc/main.cpp
+index 0cf0fa2..0e15da5 100644
+--- a/Source/Linux/bmc/main.cpp
++++ b/Source/Linux/bmc/main.cpp
+@@ -243,11 +243,7 @@ int main(int argc, char *argv[])
+     // Instantiate YAAP classes.  Note that HDT expects specific names for the classes it interacts with.
+     classes::system yaap_system("system", &systemHw);
+     classes::device yaap_device("device", &systemHw);
+-
+-    // The current implementation of `yaap_private` performs unsafe access to
+-    // virtual addresses within the BMC, which is not what is intended.  Disable
+-    // this.  We may need a better implementation of this on the BMC.
+-    //classes::yaapPrivate yaap_private("private");
++    classes::yaapPrivate yaap_private("private");
+ 
+ 
+ 
+diff --git a/Source/Shared/meson.build b/Source/Shared/meson.build
+index 115fb66..ff0cef0 100644
+--- a/Source/Shared/meson.build
++++ b/Source/Shared/meson.build
+@@ -13,6 +13,7 @@ yaap_shared_a = static_library(
+     'classes/lpcPostCode.cpp',
+     'classes/lpcRomEmulation.cpp',
+     'classes/mux.cpp',
++    'classes/private.cpp',
+     'classes/relay.cpp',
+     'classes/system.cpp',
+     'classes/wombatUvdMux.cpp',
+-- 
+2.25.1
+

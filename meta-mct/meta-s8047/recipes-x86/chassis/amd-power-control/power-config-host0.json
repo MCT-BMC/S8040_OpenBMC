@@ -1,12 +1,6 @@
 {
     "gpio_configs": [
         {
-            "Name": "IdButton",
-            "LineName": "BMC_IDLED_ON_L",
-            "Type": "GPIO",
-            "Polarity": "ActiveLow"
-        },
-        {
             "Name": "NMIButton",
             "LineName": "PASSTH_IN",
             "Type": "GPIO",

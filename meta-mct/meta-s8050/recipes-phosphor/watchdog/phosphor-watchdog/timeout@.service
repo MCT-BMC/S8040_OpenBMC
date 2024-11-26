@@ -1,0 +1,9 @@
+[Unit]
+Description=Phosphor Watchdog
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/timeout %I
+
+[Install]
+WantedBy=basic.target

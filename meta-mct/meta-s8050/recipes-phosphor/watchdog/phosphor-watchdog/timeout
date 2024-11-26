@@ -1,0 +1,51 @@
+#!/bin/sh
+action=$1
+
+power_off() {
+  #busctl set-property xyz.openbmc_project.Watchdog /xyz/openbmc_project/watchdog/host0 xyz.openbmc_project.State.Watchdog ExpireAction s xyz.openbmc_project.State.Watchdog.Action.None
+    busctl set-property xyz.openbmc_project.State.Chassis /xyz/openbmc_project/state/chassis0 \
+    xyz.openbmc_project.State.Chassis RequestedPowerTransition s xyz.openbmc_project.State.Chassis.Transition.Off
+    
+    busctl set-property xyz.openbmc_project.dissen /xyz/openbmc_project/sensors/status/IPMI_Watchdog \
+    xyz.openbmc_project.WDT.Status Status s "Down"
+
+    busctl call xyz.openbmc_project.Logging.IPMI /xyz/openbmc_project/Logging/IPMI \
+    xyz.openbmc_project.Logging.IPMI IpmiSelAdd ssaybq "SEL Entry" /xyz/openbmc_project/sensors/status/IPMI_Watchdog 3 0x2 0xff 0xff true 0x0020
+
+}
+
+power_reset() {
+    busctl set-property xyz.openbmc_project.State.Chassis /xyz/openbmc_project/state/chassis0 \
+    xyz.openbmc_project.State.Chassis RequestedPowerTransition s xyz.openbmc_project.State.Chassis.Transition.Reset
+
+    busctl set-property xyz.openbmc_project.dissen /xyz/openbmc_project/sensors/status/IPMI_Watchdog \
+    xyz.openbmc_project.WDT.Status Status s "Reset"
+
+    busctl call xyz.openbmc_project.Logging.IPMI /xyz/openbmc_project/Logging/IPMI \
+    xyz.openbmc_project.Logging.IPMI IpmiSelAdd ssaybq "SEL Entry" /xyz/openbmc_project/sensors/status/IPMI_Watchdog 3 0x1 0xff 0xff true 0x0020
+}
+
+power_cycle() {
+    busctl set-property xyz.openbmc_project.State.Chassis /xyz/openbmc_project/state/chassis0 \
+    xyz.openbmc_project.State.Chassis RequestedPowerTransition s xyz.openbmc_project.State.Chassis.Transition.PowerCycle
+
+    busctl set-property xyz.openbmc_project.dissen /xyz/openbmc_project/sensors/status/IPMI_Watchdog \
+    xyz.openbmc_project.WDT.Status Status s "Cycle"
+
+    busctl call xyz.openbmc_project.Logging.IPMI /xyz/openbmc_project/Logging/IPMI \
+    xyz.openbmc_project.Logging.IPMI IpmiSelAdd ssaybq "SEL Entry" /xyz/openbmc_project/sensors/status/IPMI_Watchdog 3 0x3 0xff 0xff true 0x0020
+}
+
+
+case "$action" in
+    "PowerOff")
+        power_off
+    ;;
+    "HardReset")
+        power_reset
+    ;;
+    "PowerCycle")
+        power_cycle
+    *）
+        exit 0;
+esac

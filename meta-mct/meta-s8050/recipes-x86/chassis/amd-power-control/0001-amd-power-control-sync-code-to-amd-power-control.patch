@@ -1,0 +1,4974 @@
+From 1403620ca3fd36a5aef26521d754beb8330b5a76 Mon Sep 17 00:00:00 2001
+From: alex <alex.huang@insyde.com>
+Date: Mon, 8 Apr 2024 01:34:11 +0800
+Subject: [PATCH] amd-power-control: sync code to amd power control
+
+1) sync code to support acpi on/off.
+2) use json format profiles file.
+---
+ power-control-x86/CMakeLists.txt              |    4 +-
+ ...nbmc_project.Chassis.Control.Power.service |   15 -
+ ...bmc_project.Chassis.Control.Power@.service |   13 +
+ power-control-x86/src/power_control.cpp       | 4108 +++++++++++------
+ power-control-x86/src/power_control.hpp       |  164 +
+ 5 files changed, 2914 insertions(+), 1390 deletions(-)
+ delete mode 100644 power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power.service
+ create mode 100644 power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power@.service
+ create mode 100644 power-control-x86/src/power_control.hpp
+
+diff --git a/power-control-x86/CMakeLists.txt b/power-control-x86/CMakeLists.txt
+index 10ee888..c346c9a 100644
+--- a/power-control-x86/CMakeLists.txt
++++ b/power-control-x86/CMakeLists.txt
+@@ -10,7 +10,7 @@ add_definitions(-DBOOST_NO_RTTI)
+ add_definitions(-DBOOST_NO_TYPEID)
+ add_definitions(-DBOOST_ASIO_DISABLE_THREADS)
+ 
+-set(SRC_FILES src/power_control.cpp)
++set(SRC_FILES src/power_control.cpp src/power_control.hpp)
+ 
+ add_executable(${PROJECT_NAME} ${SRC_FILES})
+ target_link_libraries(${PROJECT_NAME} -lstdc++fs)
+@@ -24,7 +24,7 @@ set(
+   SERVICE_FILES
+   ${PROJECT_SOURCE_DIR}/service_files/chassis-system-reset.service
+   ${PROJECT_SOURCE_DIR}/service_files/chassis-system-reset.target
+-  ${PROJECT_SOURCE_DIR}/service_files/xyz.openbmc_project.Chassis.Control.Power.service
++  ${PROJECT_SOURCE_DIR}/service_files/xyz.openbmc_project.Chassis.Control.Power@.service
+   )
+ 
+ install(FILES ${SERVICE_FILES} DESTINATION /lib/systemd/system/)
+diff --git a/power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power.service b/power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power.service
+deleted file mode 100644
+index c89b639..0000000
+--- a/power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power.service
++++ /dev/null
+@@ -1,15 +0,0 @@
+-[Unit]
+-Description=Amd Power Control
+-Wants=mapper-wait@-xyz-openbmc_project-inventory.service
+-After=mapper-wait@-xyz-openbmc_project-inventory.service
+-
+-[Service]
+-Restart=always
+-RestartSec=3
+-ExecStart=/usr/bin/power-control
+-Type=dbus
+-BusName=xyz.openbmc_project.State.Host
+-
+-[Install]
+-WantedBy=sysinit.target
+-
+diff --git a/power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power@.service b/power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power@.service
+new file mode 100644
+index 0000000..ad56251
+--- /dev/null
++++ b/power-control-x86/service_files/xyz.openbmc_project.Chassis.Control.Power@.service
+@@ -0,0 +1,13 @@
++[Unit]
++Description=Amd Power Control for the Host %i
++ConditionPathExists=/usr/share/x86-power-control/power-config-host%i.json
++
++[Service]
++Restart=always
++RestartSec=3
++ExecStart=/usr/bin/power-control %i
++Type=dbus
++BusName=xyz.openbmc_project.State.Host%i
++
++[Install]
++WantedBy=sysinit.target
+\ No newline at end of file
+diff --git a/power-control-x86/src/power_control.cpp b/power-control-x86/src/power_control.cpp
+index f44d5f2..560fd5f 100644
+--- a/power-control-x86/src/power_control.cpp
++++ b/power-control-x86/src/power_control.cpp
+@@ -1,6 +1,5 @@
+ /*
+ // Copyright (c) 2018-2019 Intel Corporation
+-// Copyright (c) 2021 AMD Inc
+ //
+ // Licensed under the Apache License, Version 2.0 (the "License");
+ // you may not use this file except in compliance with the License.
+@@ -14,216 +13,277 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ */
+-
+-extern "C" {
+-#include <linux/i2c-dev.h>
+-#include <linux/i2c.h>
+-#include <i2c/smbus.h>
+-}
+-
++#include "power_control.hpp"
+ 
+ #include <sys/sysinfo.h>
+ #include <systemd/sd-journal.h>
+ 
+-#include <boost/asio/io_service.hpp>
++#include <boost/asio/io_context.hpp>
+ #include <boost/asio/posix/stream_descriptor.hpp>
+ #include <boost/asio/steady_timer.hpp>
+ #include <boost/container/flat_map.hpp>
+ #include <boost/container/flat_set.hpp>
+ #include <gpiod.hpp>
+-
+-#include <phosphor-logging/log.hpp>
++#include <nlohmann/json.hpp>
+ #include <sdbusplus/asio/object_server.hpp>
+ 
+ #include <filesystem>
+ #include <fstream>
+-#include <iostream>
+ #include <string_view>
+-
+-// Front Panel
+-#define VOLCANO_FP_I2C_BUS     (206)
+-#define PURICO_FP_I2C_BUS      (276)
+-#define FP_I2C_BUS2            (276)
+-#define FP_IOX_ADDR            (0x1B)
+-#define FP_IOX_PORT_REG        (0x03)
+-#define FP_IOX_DATA_REG        (0x01)
+-#define FILEPATHSIZE           (64)
+-#define FP_POWER_PORT_MASK     (0xFD)
+-#define FP_POWER_ON_REG_MASK   (0x0D)
+-#define FP_POWER_OFF_REG_MASK  (0x02)
+-
+-// RSMRST check
+-#define MON_RSMRST_SLEEP_SEC   (1)
++#include <iostream>
+ 
+ namespace power_control
+ {
+-static boost::asio::io_service io;
+-std::shared_ptr<sdbusplus::asio::connection> conn;
+-
+-static std::string node = "0";
+-static std::string TURIN_FAMILY = "1a (26)";
+-static std::string TURIN_MODEL_A = "0 (0)";
+-static std::string TURIN_MODEL_B = "1 (1)";
+-static std::string TURIN_MODEL_C = "2 (2)";
+-
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> hostIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> chassisIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> chassisSysIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> powerButtonIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> resetButtonIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> nmiButtonIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> osIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> idButtonIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> nmiOutIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> restartCauseIface;
+-static std::shared_ptr<sdbusplus::asio::dbus_interface> rsmOutIface;
+-
+-const static constexpr int powerPulseTimeMs = 100;
+-const static constexpr int forceOffPulseTimeMs = 5000;
+-const static constexpr int resetPulseTimeMs = 100;
+-const static constexpr int powerCycleTimeMs = 5000;
+-const static constexpr int psPowerOKWatchdogTimeMs = 8000;
+-const static constexpr int psPowerOKRampDownTimeMs = 8000;
+-const static constexpr int gracefulPowerOffTimeMs = 90000;
+-const static constexpr int warmResetCheckTimeMs = 1000;
+-const static constexpr int powerOffSaveTimeMs = 7000;
+-
+-const static std::filesystem::path powerControlDir = "/var/lib/power-control";
+-const static constexpr std::string_view powerStateFile = "power-state";
+-
+-static bool nmiEnabled = true;
+-
+-// Timers
+-// Time holding GPIOs asserted
+-static boost::asio::steady_timer gpioAssertTimer(io);
+-// Time between off and on during a power cycle
+-static boost::asio::steady_timer powerCycleTimer(io);
+-// Time OS gracefully powering off
+-static boost::asio::steady_timer gracefulPowerOffTimer(io);
+-// Time the warm reset check
+-static boost::asio::steady_timer warmResetCheckTimer(io);
+-// Time power supply power OK assertion on power-on
+-static boost::asio::steady_timer psPowerOKWatchdogTimer(io);
+-// Time power supply power OK ramp down on force power off
+-static boost::asio::steady_timer psPowerOKRampDownTimer(io);
+-// Time power-off state save for power loss tracking
+-static boost::asio::steady_timer powerStateSaveTimer(io);
+-// POH timer
+-static boost::asio::steady_timer pohCounterTimer(io);
+-
+-// GPIO Lines and Event Descriptors
+-static gpiod::line psPowerOKLine;
+-static boost::asio::posix::stream_descriptor psPowerOKEvent(io);
+-static gpiod::line powerButtonLine;
+-static boost::asio::posix::stream_descriptor powerButtonEvent(io);
+-static gpiod::line resetButtonLine;
+-static boost::asio::posix::stream_descriptor resetButtonEvent(io);
+-static gpiod::line P0ThermtripLine;
+-static boost::asio::posix::stream_descriptor P0ThermtripEvent(io);
+-static gpiod::line P1ThermtripLine;
+-static boost::asio::posix::stream_descriptor P1ThermtripEvent(io);
+-
+-enum class PowerState
+-{
+-    on,
+-    waitForPSPowerOK,
+-    off,
+-    transitionToOff,
+-    gracefulTransitionToOff,
+-    cycleOff,
+-    transitionToCycleOff,
+-    gracefulTransitionToCycleOff,
+-    checkForWarmReset,
+-};
+-
+-static int getGPIOValue(const std::string& name)
+-{
+-    int value;
+-    gpiod::line gpioLine;
+-    // Find the GPIO line
+-    gpioLine = gpiod::find_line(name);
+-    if (!gpioLine)
+-    {
+-        std::cerr << "Can't find line: %s\n", name.c_str();
+-        return -1;
+-    }
+-    try
++    static boost::asio::io_context io;
++    std::shared_ptr<sdbusplus::asio::connection> conn;
++    PersistentState appState;
++    PowerRestoreController powerRestore(io);
++
++    static std::string node = "0";
++    static const std::string appName = "power-control";
++
++    enum class DbusConfigType
+     {
+-        gpioLine.request({__FUNCTION__, gpiod::line_request::DIRECTION_INPUT});
+-    }
+-    catch (std::system_error& exc)
++        name = 1,
++        path,
++        interface,
++        property
++    };
++    boost::container::flat_map<DbusConfigType, std::string> dbusParams = {
++        {DbusConfigType::name, "DbusName"},
++        {DbusConfigType::path, "Path"},
++        {DbusConfigType::interface, "Interface"},
++        {DbusConfigType::property, "Property"}};
++
++    enum class ConfigType
+     {
+-        std::cerr << "Error setting gpio as Input: " << name << exc.what() << "\n";
+-    }
++        GPIO = 1,
++        DBUS
++    };
+ 
+-    try
++    struct ConfigData
+     {
+-        value = gpioLine.get_value();
+-    }
+-    catch (std::system_error& exc)
++        std::string name;
++        std::string lineName;
++        std::string dbusName;
++        std::string path;
++        std::string interface;
++        bool polarity;
++        ConfigType type;
++    };
++
++    static ConfigData powerOutConfig;
++    static ConfigData powerOkConfig;
++    static ConfigData resetOutConfig;
++    static ConfigData nmiOutConfig;
++    static ConfigData sioPwrGoodConfig;
++    static ConfigData sioOnControlConfig;
++    static ConfigData sioS5Config;
++    static ConfigData postCompleteConfig;
++    static ConfigData powerButtonConfig;
++    static ConfigData resetButtonConfig;
++    static ConfigData idButtonConfig;
++    static ConfigData nmiButtonConfig;
++    static ConfigData slotPowerConfig;
++    static ConfigData hpmStbyEnConfig;
++
++    // map for storing list of gpio parameters whose config are to be read from x86
++    // power control json config
++    boost::container::flat_map<std::string, ConfigData *> powerSignalMap = {
++        {"PowerOut", &powerOutConfig},
++        {"PowerOk", &powerOkConfig},
++        {"ResetOut", &resetOutConfig},
++        {"NMIOut", &nmiOutConfig},
++        {"SioPowerGood", &sioPwrGoodConfig},
++        {"SioOnControl", &sioOnControlConfig},
++        {"SIOS5", &sioS5Config},
++        {"PostComplete", &postCompleteConfig},
++        {"PowerButton", &powerButtonConfig},
++        {"ResetButton", &resetButtonConfig},
++        {"IdButton", &idButtonConfig},
++        {"NMIButton", &nmiButtonConfig},
++        {"SlotPower", &slotPowerConfig},
++        {"HpmStbyEn", &hpmStbyEnConfig}};
++
++    static std::string hostDbusName = "xyz.openbmc_project.State.Host";
++    static std::string chassisDbusName = "xyz.openbmc_project.State.Chassis";
++    static std::string osDbusName = "xyz.openbmc_project.State.OperatingSystem";
++    static std::string buttonDbusName = "xyz.openbmc_project.Chassis.Buttons";
++    static std::string nmiDbusName = "xyz.openbmc_project.Control.Host.NMI";
++    static std::string rstCauseDbusName =
++        "xyz.openbmc_project.Control.Host.RestartCause";
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> hostIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> chassisIface;
++#ifdef CHASSIS_SYSTEM_RESET
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> chassisSysIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> chassisSlotIface;
++#endif
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> powerButtonIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> resetButtonIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> nmiButtonIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> osIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> idButtonIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> nmiOutIface;
++    static std::shared_ptr<sdbusplus::asio::dbus_interface> restartCauseIface;
++
++    static gpiod::line powerButtonMask;
++    static gpiod::line resetButtonMask;
++    static bool nmiButtonMasked = false;
++#if IGNORE_SOFT_RESETS_DURING_POST
++    static bool ignoreNextSoftReset = false;
++#endif
++
++    // This map contains all timer values that are to be read from json config
++    boost::container::flat_map<std::string, int> TimerMap = {
++        {"PowerPulseMs", 200},
++        {"ForceOffPulseMs", 15000},
++        {"ResetPulseMs", 500},
++        {"PowerCycleMs", 5000},
++        {"SioPowerGoodWatchdogMs", 1000},
++        {"PsPowerOKWatchdogMs", 8000},
++        {"GracefulPowerOffS", (5 * 60)},
++        {"WarmResetCheckMs", 500},
++        {"PowerOffSaveMs", 7000},
++        {"SlotPowerCycleMs", 200},
++        {"DbusGetPropertyRetry", 1000}};
++
++    static bool nmiEnabled = true;
++    static bool nmiWhenPoweredOff = true;
++    static bool sioEnabled = true;
++
++    // Timers
++    // Time holding GPIOs asserted
++    static boost::asio::steady_timer gpioAssertTimer(io);
++    // Time between off and on during a power cycle
++    static boost::asio::steady_timer powerCycleTimer(io);
++    // Time OS gracefully powering off
++    static boost::asio::steady_timer gracefulPowerOffTimer(io);
++    // Time the warm reset check
++    static boost::asio::steady_timer warmResetCheckTimer(io);
++    // Time power supply power OK assertion on power-on
++    static boost::asio::steady_timer psPowerOKWatchdogTimer(io);
++    // Time SIO power good assertion on power-on
++    static boost::asio::steady_timer sioPowerGoodWatchdogTimer(io);
++    // Time power-off state save for power loss tracking
++    static boost::asio::steady_timer powerStateSaveTimer(io);
++    // POH timer
++    static boost::asio::steady_timer pohCounterTimer(io);
++    // Time when to allow restart cause updates
++    static boost::asio::steady_timer restartCauseTimer(io);
++    static boost::asio::steady_timer slotPowerCycleTimer(io);
++
++    // Map containing timers used for D-Bus get-property retries
++    static boost::container::flat_map<std::string, boost::asio::steady_timer>
++        dBusRetryTimers;
++
++    // GPIO Lines and Event Descriptors
++    static gpiod::line psPowerOKLine;
++    static boost::asio::posix::stream_descriptor psPowerOKEvent(io);
++    static gpiod::line sioPowerGoodLine;
++    static boost::asio::posix::stream_descriptor sioPowerGoodEvent(io);
++    static gpiod::line sioOnControlLine;
++    static boost::asio::posix::stream_descriptor sioOnControlEvent(io);
++    static gpiod::line sioS5Line;
++    static boost::asio::posix::stream_descriptor sioS5Event(io);
++    static gpiod::line powerButtonLine;
++    static boost::asio::posix::stream_descriptor powerButtonEvent(io);
++    static gpiod::line resetButtonLine;
++    static boost::asio::posix::stream_descriptor resetButtonEvent(io);
++    static gpiod::line nmiButtonLine;
++    static boost::asio::posix::stream_descriptor nmiButtonEvent(io);
++    static gpiod::line idButtonLine;
++    static boost::asio::posix::stream_descriptor idButtonEvent(io);
++    static gpiod::line postCompleteLine;
++    static boost::asio::posix::stream_descriptor postCompleteEvent(io);
++    static gpiod::line nmiOutLine;
++    static gpiod::line slotPowerLine;
++
++    static constexpr uint8_t beepPowerFail = 8;
++
++    static void beep(const uint8_t &beepPriority)
+     {
+-        std::cerr << "Error getting gpio value: " << name << exc.what() << "\n";
+-        return -1;
+-    }
++        std::cerr << "Beep with priority: " << beepPriority << std::endl;
+ 
+-    return value;
+-}
+-
+-static bool i2cCommandLed(int bus, bool led)
+-{
+-    int fd = -1;
+-    char i2c_devname[FILEPATHSIZE];
+-    int portRead, portWrite, dataRead, dataWrite;
+-
+-    // check FP I2C Bus
+-    snprintf(i2c_devname, FILEPATHSIZE, "/dev/i2c-%d", bus);
+-    fd = open(i2c_devname, O_RDWR);
+-    if(fd < 0)
+-        return false; // cannot open i2c bus
+-
+-    if (ioctl(fd, I2C_SLAVE, FP_IOX_ADDR) >= 0) {
+-        // read IOX Port Reg
+-        portRead = i2c_smbus_read_byte_data(fd, FP_IOX_PORT_REG);
+-        dataRead = i2c_smbus_read_byte_data(fd, FP_IOX_DATA_REG);
+-        portWrite = portRead & FP_POWER_PORT_MASK;
+-        if (led == true)
+-            dataWrite = dataRead & FP_POWER_ON_REG_MASK;
+-        else
+-            dataWrite = dataRead | FP_POWER_OFF_REG_MASK;
+-        i2c_smbus_write_byte_data(fd, FP_IOX_PORT_REG, portWrite);
+-        i2c_smbus_write_byte_data(fd, FP_IOX_DATA_REG, dataWrite);
++        conn->async_method_call(
++            [](boost::system::error_code ec)
++            {
++                if (ec)
++                {
++                    std::cerr << "beep returned error with async_method_call (ec = " << ec.message() << ")" << std::endl;
++                    return;
++                }
++            },
++            "xyz.openbmc_project.BeepCode", "/xyz/openbmc_project/BeepCode",
++            "xyz.openbmc_project.BeepCode", "Beep", uint8_t(beepPriority));
+     }
+-    else
+-        std::cerr << "Error ioctl call for Front Panel i2c device " << FP_IOX_ADDR << " \n";
+ 
+-    if (fd >= 0)
+-        close(fd);
++    enum class OperatingSystemStateStage
++    {
++        Inactive,
++        Standby,
++    };
++    static OperatingSystemStateStage operatingSystemState;
++    static constexpr std::string_view
++    getOperatingSystemStateStage(const OperatingSystemStateStage stage)
++    {
++        switch (stage)
++        {
++        case OperatingSystemStateStage::Inactive:
++            return "xyz.openbmc_project.State.OperatingSystem.Status.OSStatus.Inactive";
++            break;
++        case OperatingSystemStateStage::Standby:
++            return "xyz.openbmc_project.State.OperatingSystem.Status.OSStatus.Standby";
++            break;
++        default:
++            return "xyz.openbmc_project.State.OperatingSystem.Status.OSStatus.Inactive";
++            break;
++        }
++    };
++    static void setOperatingSystemState(const OperatingSystemStateStage stage)
++    {
++        operatingSystemState = stage;
++#if IGNORE_SOFT_RESETS_DURING_POST
++        // If POST complete has asserted set ignoreNextSoftReset to false to avoid
++        // masking soft resets after POST
++        if (operatingSystemState == OperatingSystemStateStage::Standby)
++        {
++            ignoreNextSoftReset = false;
++        }
++#endif
++        osIface->set_property("OperatingSystemState",
++                              std::string(getOperatingSystemStateStage(stage)));
+ 
+-    return true;
+-}
++        std::cerr << "Moving os state to " << getOperatingSystemStateStage(stage) << " stage" << std::endl;
++    }
+ 
+-static void setFrontpanelPowerLed(bool led)
+-{
+-    // check Volcano FP
+-    i2cCommandLed(VOLCANO_FP_I2C_BUS, led);
+-    // check Purico FP
+-    i2cCommandLed(PURICO_FP_I2C_BUS, led);
+-}
+-
+-static PowerState powerState;
+-static std::string getPowerStateName(PowerState state)
+-{
+-    switch (state)
++    enum class PowerState
++    {
++        on,
++        waitForPSPowerOK,
++        waitForSIOPowerGood,
++        off,
++        transitionToOff,
++        gracefulTransitionToOff,
++        cycleOff,
++        transitionToCycleOff,
++        gracefulTransitionToCycleOff,
++        checkForWarmReset,
++    };
++    static PowerState powerState;
++    static std::string getPowerStateName(PowerState state)
+     {
++        switch (state)
++        {
+         case PowerState::on:
+-            setFrontpanelPowerLed(true);
+             return "On";
+             break;
+         case PowerState::waitForPSPowerOK:
+             return "Wait for Power Supply Power OK";
+             break;
++        case PowerState::waitForSIOPowerGood:
++            return "Wait for SIO Power Good";
++            break;
+         case PowerState::off:
+-            setFrontpanelPowerLed(false);
+             return "Off";
+             break;
+         case PowerState::transitionToOff:
+@@ -247,46 +307,73 @@ static std::string getPowerStateName(PowerState state)
+         default:
+             return "unknown state: " + std::to_string(static_cast<int>(state));
+             break;
++        }
+     }
+-}
+-static void logStateTransition(const PowerState state)
+-{
+-    std::string logMsg =
+-        "Host0: Moving to \"" + getPowerStateName(state) + "\" state";
+-    phosphor::logging::log<phosphor::logging::level::INFO>(
+-        logMsg.c_str(),
+-        phosphor::logging::entry("STATE=%s", getPowerStateName(state).c_str()),
+-        phosphor::logging::entry("HOST=0"));
+-}
+-
+-enum class Event
+-{
+-    psPowerOKAssert,
+-    psPowerOKDeAssert,
+-    powerButtonPressed,
+-    resetButtonPressed,
+-    powerCycleTimerExpired,
+-    psPowerOKWatchdogTimerExpired,
+-    gracefulPowerOffTimerExpired,
+-    powerOnRequest,
+-    powerOffRequest,
+-    powerCycleRequest,
+-    resetRequest,
+-    gracefulPowerOffRequest,
+-    gracefulPowerCycleRequest,
+-    warmResetDetected,
+-    psPowerOKRampDownTimerExpired,
+-};
+-static std::string getEventName(Event event)
+-{
+-    switch (event)
++    static void logStateTransition(const PowerState state)
++    {
++        std::cerr << "Host" << node << ": Moving to \"" << getPowerStateName(state) << "\" state" << std::endl;
++    }
++
++    enum class Event
++    {
++        psPowerOKAssert,
++        psPowerOKDeAssert,
++        sioPowerGoodAssert,
++        sioPowerGoodDeAssert,
++        sioS5Assert,
++        sioS5DeAssert,
++        pltRstAssert,
++        pltRstDeAssert,
++        postCompleteAssert,
++        postCompleteDeAssert,
++        powerButtonPressed,
++        resetButtonPressed,
++        powerCycleTimerExpired,
++        psPowerOKWatchdogTimerExpired,
++        sioPowerGoodWatchdogTimerExpired,
++        gracefulPowerOffTimerExpired,
++        powerOnRequest,
++        powerOffRequest,
++        powerCycleRequest,
++        resetRequest,
++        gracefulPowerOffRequest,
++        gracefulPowerCycleRequest,
++        warmResetDetected,
++    };
++    static std::string getEventName(Event event)
+     {
++        switch (event)
++        {
+         case Event::psPowerOKAssert:
+             return "power supply power OK assert";
+             break;
+         case Event::psPowerOKDeAssert:
+             return "power supply power OK de-assert";
+             break;
++        case Event::sioPowerGoodAssert:
++            return "SIO power good assert";
++            break;
++        case Event::sioPowerGoodDeAssert:
++            return "SIO power good de-assert";
++            break;
++        case Event::sioS5Assert:
++            return "SIO S5 assert";
++            break;
++        case Event::sioS5DeAssert:
++            return "SIO S5 de-assert";
++            break;
++        case Event::pltRstAssert:
++            return "PLT_RST assert";
++            break;
++        case Event::pltRstDeAssert:
++            return "PLT_RST de-assert";
++            break;
++        case Event::postCompleteAssert:
++            return "POST Complete assert";
++            break;
++        case Event::postCompleteDeAssert:
++            return "POST Complete de-assert";
++            break;
+         case Event::powerButtonPressed:
+             return "power button pressed";
+             break;
+@@ -299,8 +386,8 @@ static std::string getEventName(Event event)
+         case Event::psPowerOKWatchdogTimerExpired:
+             return "power supply power OK watchdog timer expired";
+             break;
+-        case Event::psPowerOKRampDownTimerExpired:
+-            return "power supply power OK RampDown timer expired";
++        case Event::sioPowerGoodWatchdogTimerExpired:
++            return "SIO power good watchdog timer expired";
+             break;
+         case Event::gracefulPowerOffTimerExpired:
+             return "graceful power-off timer expired";
+@@ -329,38 +416,38 @@ static std::string getEventName(Event event)
+         default:
+             return "unknown event: " + std::to_string(static_cast<int>(event));
+             break;
++        }
+     }
+-}
+-static void logEvent(const std::string_view stateHandler, const Event event)
+-{
+-    std::string logMsg{stateHandler};
+-    logMsg += ": " + getEventName(event) + " event received";
+-    phosphor::logging::log<phosphor::logging::level::INFO>(
+-        logMsg.c_str(),
+-        phosphor::logging::entry("EVENT=%s", getEventName(event).c_str()));
+-}
+-
+-// Power state handlers
+-static void powerStateOn(const Event event);
+-static void powerStateWaitForPSPowerOK(const Event event);
+-static void powerStateOff(const Event event);
+-static void powerStateTransitionToOff(const Event event);
+-static void powerStateGracefulTransitionToOff(const Event event);
+-static void powerStateCycleOff(const Event event);
+-static void powerStateTransitionToCycleOff(const Event event);
+-static void powerStateGracefulTransitionToCycleOff(const Event event);
+-static void powerStateCheckForWarmReset(const Event event);
+-
+-static std::function<void(const Event)> getPowerStateHandler(PowerState state)
+-{
+-    switch (state)
++    static void logEvent(const std::string_view stateHandler, const Event event)
++    {
++        std::cerr << stateHandler << ":" << getEventName(event) << "event received" << std::endl;
++    }
++
++    // Power state handlers
++    static void powerStateOn(const Event event);
++    static void powerStateWaitForPSPowerOK(const Event event);
++    static void powerStateWaitForSIOPowerGood(const Event event);
++    static void powerStateOff(const Event event);
++    static void powerStateTransitionToOff(const Event event);
++    static void powerStateGracefulTransitionToOff(const Event event);
++    static void powerStateCycleOff(const Event event);
++    static void powerStateTransitionToCycleOff(const Event event);
++    static void powerStateGracefulTransitionToCycleOff(const Event event);
++    static void powerStateCheckForWarmReset(const Event event);
++
++    static std::function<void(const Event)> getPowerStateHandler(PowerState state)
+     {
++        switch (state)
++        {
+         case PowerState::on:
+             return powerStateOn;
+             break;
+         case PowerState::waitForPSPowerOK:
+             return powerStateWaitForPSPowerOK;
+             break;
++        case PowerState::waitForSIOPowerGood:
++            return powerStateWaitForSIOPowerGood;
++            break;
+         case PowerState::off:
+             return powerStateOff;
+             break;
+@@ -383,50 +470,50 @@ static std::function<void(const Event)> getPowerStateHandler(PowerState state)
+             return powerStateCheckForWarmReset;
+             break;
+         default:
+-            return std::function<void(const Event)>{};
++            return nullptr;
+             break;
+-    }
+-};
++        }
++    };
+ 
+-static void sendPowerControlEvent(const Event event)
+-{
+-    std::function<void(const Event)> handler = getPowerStateHandler(powerState);
+-    if (handler == nullptr)
++    static void sendPowerControlEvent(const Event event)
+     {
+-        std::cerr << "Failed to find handler for power state: "
+-                  << static_cast<int>(powerState) << "\n";
+-        return;
++        std::function<void(const Event)> handler = getPowerStateHandler(powerState);
++        if (handler == nullptr)
++        {
++            std::cerr << "Failed to find handler for power state: " << static_cast<int>(powerState) << std::endl;
++            return;
++        }
++        handler(event);
+     }
+-    handler(event);
+-}
+-
+-static uint64_t getCurrentTimeMs()
+-{
+-    struct timespec time = {};
+ 
+-    if (clock_gettime(CLOCK_REALTIME, &time) < 0)
++    static uint64_t getCurrentTimeMs()
+     {
+-        return 0;
+-    }
+-    uint64_t currentTimeMs = static_cast<uint64_t>(time.tv_sec) * 1000;
+-    currentTimeMs += static_cast<uint64_t>(time.tv_nsec) / 1000 / 1000;
++        struct timespec time = {};
+ 
+-    return currentTimeMs;
+-}
++        if (clock_gettime(CLOCK_REALTIME, &time) < 0)
++        {
++            return 0;
++        }
++        uint64_t currentTimeMs = static_cast<uint64_t>(time.tv_sec) * 1000;
++        currentTimeMs += static_cast<uint64_t>(time.tv_nsec) / 1000 / 1000;
+ 
+-static constexpr std::string_view getHostState(const PowerState state)
+-{
+-    switch (state)
++        return currentTimeMs;
++    }
++
++    static constexpr std::string_view getHostState(const PowerState state)
+     {
++        switch (state)
++        {
+         case PowerState::on:
+-        case PowerState::transitionToOff:
+         case PowerState::gracefulTransitionToOff:
+-        case PowerState::transitionToCycleOff:
+         case PowerState::gracefulTransitionToCycleOff:
+             return "xyz.openbmc_project.State.Host.HostState.Running";
+             break;
+         case PowerState::waitForPSPowerOK:
++        case PowerState::waitForSIOPowerGood:
+         case PowerState::off:
++        case PowerState::transitionToOff:
++        case PowerState::transitionToCycleOff:
+         case PowerState::cycleOff:
+         case PowerState::checkForWarmReset:
+             return "xyz.openbmc_project.State.Host.HostState.Off";
+@@ -434,12 +521,12 @@ static constexpr std::string_view getHostState(const PowerState state)
+         default:
+             return "";
+             break;
+-    }
+-};
+-static constexpr std::string_view getChassisState(const PowerState state)
+-{
+-    switch (state)
++        }
++    };
++    static constexpr std::string_view getChassisState(const PowerState state)
+     {
++        switch (state)
++        {
+         case PowerState::on:
+         case PowerState::transitionToOff:
+         case PowerState::gracefulTransitionToOff:
+@@ -449,6 +536,7 @@ static constexpr std::string_view getChassisState(const PowerState state)
+             return "xyz.openbmc_project.State.Chassis.PowerState.On";
+             break;
+         case PowerState::waitForPSPowerOK:
++        case PowerState::waitForSIOPowerGood:
+         case PowerState::off:
+         case PowerState::cycleOff:
+             return "xyz.openbmc_project.State.Chassis.PowerState.Off";
+@@ -456,59 +544,88 @@ static constexpr std::string_view getChassisState(const PowerState state)
+         default:
+             return "";
+             break;
++        }
++    };
++#ifdef CHASSIS_SYSTEM_RESET
++    enum class SlotPowerState
++    {
++        on,
++        off,
++    };
++    static SlotPowerState slotPowerState;
++    static constexpr std::string_view getSlotState(const SlotPowerState state)
++    {
++        switch (state)
++        {
++        case SlotPowerState::on:
++            return "xyz.openbmc_project.State.Chassis.PowerState.On";
++            break;
++        case SlotPowerState::off:
++            return "xyz.openbmc_project.State.Chassis.PowerState.Off";
++            break;
++        default:
++            return "";
++            break;
++        }
++    };
++    static void setSlotPowerState(const SlotPowerState state)
++    {
++        slotPowerState = state;
++        chassisSlotIface->set_property("CurrentPowerState",
++                                       std::string(getSlotState(slotPowerState)));
++        chassisSlotIface->set_property("LastStateChangeTime", getCurrentTimeMs());
+     }
+-};
+-static void savePowerState(const PowerState state)
+-{
+-    powerStateSaveTimer.expires_after(
+-        std::chrono::milliseconds(powerOffSaveTimeMs));
+-    powerStateSaveTimer.async_wait([state](const boost::system::error_code ec) {
++#endif
++    static void savePowerState(const PowerState state)
++    {
++        powerStateSaveTimer.expires_after(
++            std::chrono::milliseconds(TimerMap["PowerOffSaveMs"]));
++        powerStateSaveTimer.async_wait([state](const boost::system::error_code ec)
++                                       {
+         if (ec)
+         {
+             // operation_aborted is expected if timer is canceled before
+             // completion.
+             if (ec != boost::asio::error::operation_aborted)
+             {
+-                std::cerr << "Power-state save async_wait failed: "
+-                          << ec.message() << "\n";
++                std::cerr << "Power-state save async_wait failed: " << ec.message() << std::endl;
+             }
+             return;
+         }
+-        std::ofstream powerStateStream(powerControlDir / powerStateFile);
+-        powerStateStream << getChassisState(state);
+-    });
+-}
+-static void setPowerState(const PowerState state)
+-{
+-    powerState = state;
+-    logStateTransition(state);
++        appState.set(PersistentState::Params::PowerState,
++                     std::string{getChassisState(state)}); });
++    }
++    static void setPowerState(const PowerState state)
++    {
++        powerState = state;
++        logStateTransition(state);
+ 
+-    hostIface->set_property("CurrentHostState",
+-                            std::string(getHostState(powerState)));
++        hostIface->set_property("CurrentHostState",
++                                std::string(getHostState(powerState)));
+ 
+-    chassisIface->set_property("CurrentPowerState",
+-                               std::string(getChassisState(powerState)));
+-    chassisIface->set_property("LastStateChangeTime", getCurrentTimeMs());
++        chassisIface->set_property("CurrentPowerState",
++                                   std::string(getChassisState(powerState)));
++        chassisIface->set_property("LastStateChangeTime", getCurrentTimeMs());
+ 
+-    // Save the power state for the restore policy
+-    savePowerState(state);
+-}
++        // Save the power state for the restore policy
++        savePowerState(state);
++    }
+ 
+-enum class RestartCause
+-{
+-    command,
+-    resetButton,
+-    powerButton,
+-    watchdog,
+-    powerPolicyOn,
+-    powerPolicyRestore,
+-    softReset,
+-};
+-static boost::container::flat_set<RestartCause> causeSet;
+-static std::string getRestartCause(RestartCause cause)
+-{
+-    switch (cause)
++    enum class RestartCause
+     {
++        command,
++        resetButton,
++        powerButton,
++        watchdog,
++        powerPolicyOn,
++        powerPolicyRestore,
++        softReset,
++    };
++    static boost::container::flat_set<RestartCause> causeSet;
++    static std::string getRestartCause(RestartCause cause)
++    {
++        switch (cause)
++        {
+         case RestartCause::command:
+             return "xyz.openbmc_project.State.Host.RestartCause.IpmiCommand";
+             break;
+@@ -522,12 +639,10 @@ static std::string getRestartCause(RestartCause cause)
+             return "xyz.openbmc_project.State.Host.RestartCause.WatchdogTimer";
+             break;
+         case RestartCause::powerPolicyOn:
+-            return "xyz.openbmc_project.State.Host.RestartCause."
+-                   "PowerPolicyAlwaysOn";
++            return "xyz.openbmc_project.State.Host.RestartCause.PowerPolicyAlwaysOn";
+             break;
+         case RestartCause::powerPolicyRestore:
+-            return "xyz.openbmc_project.State.Host.RestartCause."
+-                   "PowerPolicyPreviousState";
++            return "xyz.openbmc_project.State.Host.RestartCause.PowerPolicyPreviousState";
+             break;
+         case RestartCause::softReset:
+             return "xyz.openbmc_project.State.Host.RestartCause.SoftReset";
+@@ -535,556 +650,858 @@ static std::string getRestartCause(RestartCause cause)
+         default:
+             return "xyz.openbmc_project.State.Host.RestartCause.Unknown";
+             break;
++        }
+     }
+-}
+-static void addRestartCause(const RestartCause cause)
+-{
+-    // Add this to the set of causes for this restart
+-    causeSet.insert(cause);
+-}
+-static void clearRestartCause()
+-{
+-    // Clear the set for the next restart
+-    causeSet.clear();
+-}
+-static void setRestartCauseProperty(const std::string& cause)
+-{
+-    std::cerr << "RestartCause set to " << cause << "\n";
+-    restartCauseIface->set_property("RestartCause", cause);
+-}
+-
+-static void setRestartCause()
+-{
+-    // Determine the actual restart cause based on the set of causes
+-    std::string restartCause =
+-        "xyz.openbmc_project.State.Host.RestartCause.Unknown";
+-    if (causeSet.contains(RestartCause::watchdog))
++    static void addRestartCause(const RestartCause cause)
+     {
+-        restartCause = getRestartCause(RestartCause::watchdog);
++        // Add this to the set of causes for this restart
++        causeSet.insert(cause);
+     }
+-    else if (causeSet.contains(RestartCause::command))
++    static void clearRestartCause()
+     {
+-        restartCause = getRestartCause(RestartCause::command);
++        // Clear the set for the next restart
++        causeSet.clear();
+     }
+-    else if (causeSet.contains(RestartCause::resetButton))
++    static void setRestartCauseProperty(const std::string &cause)
+     {
+-        restartCause = getRestartCause(RestartCause::resetButton);
++        std::cerr << "RestartCause set to " << cause << std::endl;
++        restartCauseIface->set_property("RestartCause", cause);
+     }
+-    else if (causeSet.contains(RestartCause::powerButton))
++
++#ifdef USE_ACBOOT
++    static void resetACBootProperty()
+     {
+-        restartCause = getRestartCause(RestartCause::powerButton);
++        if ((causeSet.contains(RestartCause::command)) ||
++            (causeSet.contains(RestartCause::softReset)))
++        {
++            conn->async_method_call(
++                [](boost::system::error_code ec)
++                {
++                    if (ec)
++                    {
++                        std::cerr << "failed to reset ACBoot property" << std::endl;
++                    }
++                },
++                "xyz.openbmc_project.Settings",
++                "/xyz/openbmc_project/control/host0/ac_boot",
++                "org.freedesktop.DBus.Properties", "Set",
++                "xyz.openbmc_project.Common.ACBoot", "ACBoot",
++                std::variant<std::string>{"False"});
++        }
+     }
+-    else if (causeSet.contains(RestartCause::powerPolicyOn))
++#endif // USE_ACBOOT
++
++    static void setRestartCause()
+     {
+-        restartCause = getRestartCause(RestartCause::powerPolicyOn);
++        // Determine the actual restart cause based on the set of causes
++        std::string restartCause =
++            "xyz.openbmc_project.State.Host.RestartCause.Unknown";
++        if (causeSet.contains(RestartCause::watchdog))
++        {
++            restartCause = getRestartCause(RestartCause::watchdog);
++        }
++        else if (causeSet.contains(RestartCause::command))
++        {
++            restartCause = getRestartCause(RestartCause::command);
++        }
++        else if (causeSet.contains(RestartCause::resetButton))
++        {
++            restartCause = getRestartCause(RestartCause::resetButton);
++        }
++        else if (causeSet.contains(RestartCause::powerButton))
++        {
++            restartCause = getRestartCause(RestartCause::powerButton);
++        }
++        else if (causeSet.contains(RestartCause::powerPolicyOn))
++        {
++            restartCause = getRestartCause(RestartCause::powerPolicyOn);
++        }
++        else if (causeSet.contains(RestartCause::powerPolicyRestore))
++        {
++            restartCause = getRestartCause(RestartCause::powerPolicyRestore);
++        }
++        else if (causeSet.contains(RestartCause::softReset))
++        {
++#if IGNORE_SOFT_RESETS_DURING_POST
++            if (ignoreNextSoftReset)
++            {
++                ignoreNextSoftReset = false;
++                return;
++            }
++#endif
++            restartCause = getRestartCause(RestartCause::softReset);
++        }
++
++        setRestartCauseProperty(restartCause);
+     }
+-    else if (causeSet.contains(RestartCause::powerPolicyRestore))
++
++    static void systemPowerGoodFailedLog()
+     {
+-        restartCause = getRestartCause(RestartCause::powerPolicyRestore);
++        sd_journal_send(
++            "MESSAGE=PowerControl: system power good failed to assert (VR failure)",
++            "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++            "OpenBMC.0.1.SystemPowerGoodFailed", "REDFISH_MESSAGE_ARGS=%d",
++            TimerMap["SioPowerGoodWatchdogMs"], NULL);
+     }
+-    else if (causeSet.contains(RestartCause::softReset))
++
++    static void psPowerOKFailedLog()
+     {
+-        restartCause = getRestartCause(RestartCause::softReset);
++        sd_journal_send(
++            "MESSAGE=PowerControl: power supply power good failed to assert",
++            "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++            "OpenBMC.0.1.PowerSupplyPowerGoodFailed", "REDFISH_MESSAGE_ARGS=%d",
++            TimerMap["PsPowerOKWatchdogMs"], NULL);
+     }
+ 
+-    setRestartCauseProperty(restartCause);
+-}
+-
+-static void psPowerOKFailedLog()
+-{
+-    sd_journal_send(
+-        "MESSAGE=PowerControl: power supply power good failed to assert",
+-        "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-        "OpenBMC.0.1.PowerSupplyPowerGoodFailed", "REDFISH_MESSAGE_ARGS=%d",
+-        psPowerOKWatchdogTimeMs, NULL);
+-}
+-
+-static void psPowerOKRampDownFailedLog()
+-{
+-    sd_journal_send(
+-        "MESSAGE=PowerControl: power supply power good failed to rampdown",
+-        "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-        "OpenBMC.0.1.PowerSupplyPowerGoodRampDownFailed", "REDFISH_MESSAGE_ARGS=%d",
+-        psPowerOKRampDownTimeMs, NULL);
+-}
+-
+-static void powerRestorePolicyLog()
+-{
+-    sd_journal_send("MESSAGE=PowerControl: power restore policy applied",
+-                    "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-                    "OpenBMC.0.1.PowerRestorePolicyApplied", NULL);
+-}
+-
+-static void powerButtonPressLog()
+-{
+-    sd_journal_send("MESSAGE=PowerControl: power button pressed", "PRIORITY=%i",
+-                    LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-                    "OpenBMC.0.1.PowerButtonPressed", NULL);
+-}
+-
+-static void resetButtonPressLog()
+-{
+-    sd_journal_send("MESSAGE=PowerControl: reset button pressed", "PRIORITY=%i",
+-                    LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-                    "OpenBMC.0.1.ResetButtonPressed", NULL);
+-}
+-
+-static void nmiButtonPressLog()
+-{
+-    sd_journal_send("MESSAGE=PowerControl: NMI button pressed", "PRIORITY=%i",
+-                    LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-                    "OpenBMC.0.1.NMIButtonPressed", NULL);
+-}
+-
+-static void nmiDiagIntLog()
+-{
+-    sd_journal_send("MESSAGE=PowerControl: NMI Diagnostic Interrupt",
+-                    "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-                    "OpenBMC.0.1.NMIDiagnosticInterrupt", NULL);
+-}
++    static void powerRestorePolicyLog()
++    {
++        sd_journal_send("MESSAGE=PowerControl: power restore policy applied",
++                        "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++                        "OpenBMC.0.1.PowerRestorePolicyApplied", NULL);
++    }
+ 
+-static void RSMresetLog()
+-{
+-    std::string ras_err_msg = "Request to issue SOC Reset (RSMRST)";
+-    sd_journal_print(LOG_DEBUG, "Request to issue SOC Reset (RSMRST)\n");
+-    sd_journal_send("MESSAGE=%s", ras_err_msg.c_str(), "PRIORITY=%i",
+-                        LOG_ERR, "REDFISH_MESSAGE_ID=%s",
+-                        "OpenBMC.0.1.CPUError", "REDFISH_MESSAGE_ARGS=%s",
+-                        ras_err_msg.c_str(), NULL);
+-}
+-
+-static int initializePowerStateStorage()
+-{
+-    // create the power control directory if it doesn't exist
+-    std::error_code ec;
+-    if (!(std::filesystem::create_directories(powerControlDir, ec)))
++    static void powerButtonPressLog()
+     {
+-        if (ec.value() != 0)
+-        {
+-            std::cerr << "failed to create " << powerControlDir << ": "
+-                      << ec.message() << "\n";
+-            return -1;
+-        }
++        sd_journal_send("MESSAGE=PowerControl: power button pressed", "PRIORITY=%i",
++                        LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++                        "OpenBMC.0.1.PowerButtonPressed", NULL);
+     }
+-    // Create the power state file if it doesn't exist
+-    if (!std::filesystem::exists(powerControlDir / powerStateFile))
++
++    static void resetButtonPressLog()
+     {
+-        std::ofstream powerStateStream(powerControlDir / powerStateFile);
+-        powerStateStream << getChassisState(powerState);
++        sd_journal_send("MESSAGE=PowerControl: reset button pressed", "PRIORITY=%i",
++                        LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++                        "OpenBMC.0.1.ResetButtonPressed", NULL);
+     }
+-    return 0;
+-}
+ 
+-static bool wasPowerDropped()
+-{
+-    std::ifstream powerStateStream(powerControlDir / powerStateFile);
+-    if (!powerStateStream.is_open())
++    static void nmiButtonPressLog()
+     {
+-        std::cerr << "Failed to open power state file\n";
+-        return false;
++        sd_journal_send("MESSAGE=PowerControl: NMI button pressed", "PRIORITY=%i",
++                        LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++                        "OpenBMC.0.1.NMIButtonPressed", NULL);
+     }
+ 
+-    std::string state;
+-    std::getline(powerStateStream, state);
+-    return state == "xyz.openbmc_project.State.Chassis.PowerState.On";
+-}
++    static void nmiDiagIntLog()
++    {
++        sd_journal_send("MESSAGE=PowerControl: NMI Diagnostic Interrupt",
++                        "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++                        "OpenBMC.0.1.NMIDiagnosticInterrupt", NULL);
++    }
+ 
+-static void powerRestorePolicyCheck()
+-{
+-    // Check restore policy on DBus
+-    conn->async_method_call(
+-        [](boost::system::error_code ec,
+-                const std::variant<std::string>& restorepolicy) {
+-        if (ec)
+-        {
+-            std::cerr << "Error read restore policy\n";
+-            return;
+-        }
+-        const std::string* policy =
+-                std::get_if<std::string>(&restorepolicy);
+-        if (policy == nullptr)
++    PersistentState::PersistentState()
++    {
++        // create the power control directory if it doesn't exist
++        std::error_code ec;
++        if (!(std::filesystem::create_directories(powerControlDir, ec)))
+         {
+-            std::cerr << "Unable to read restore policy\n";
+-            return;
++            if (ec.value() != 0)
++            {
++                std::cerr << "failed to create " << powerControlDir.string() << ": " << ec.message() << std::endl;
++                throw std::runtime_error("Failed to create state directory");
++            }
+         }
+ 
+-        if (policy->compare("None") == 0)
++        // read saved state, it's ok, if the file doesn't exists
++        std::ifstream appStateStream(powerControlDir / stateFile);
++        if (!appStateStream.is_open())
+         {
++            std::cerr << "Cannot open state file " << std::string(powerControlDir / stateFile) << std::endl;
++            stateData = nlohmann::json({});
+             return;
+         }
+-        else
++        try
+         {
+-            std::cerr << "Invoking Restore Policy: " << policy->c_str() << " \n";
+-
+-            sd_journal_send("MESSAGE=PowerControl: power restore policy applied",
+-                    "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
+-                    "OpenBMC.0.1.PowerRestorePolicyApplied", NULL);
+-
+-            if (policy->compare("xyz.openbmc_project.Control.Power.RestorePolicy.Policy.AlwaysOn") == 0)
+-            {
+-                sendPowerControlEvent(Event::powerOnRequest);
+-                setRestartCauseProperty(getRestartCause(RestartCause::powerPolicyOn));
+-            }
+-            else if (policy->compare("xyz.openbmc_project.Control.Power.RestorePolicy.Policy.Restore") == 0)
++            appStateStream >> stateData;
++            if (stateData.is_discarded())
+             {
+-                if (wasPowerDropped())
+-                {
+-                    std::cerr << "Power was dropped, restoring Host On state\n";
+-                    sendPowerControlEvent(Event::powerOnRequest);
+-                    setRestartCauseProperty(getRestartCause(RestartCause::powerPolicyRestore));
+-                }
+-                else
+-                {
+-                    std::cerr << "No power drop, restoring Host Off state\n";
+-                }
++                std::cerr << "Cannot parse state file " << std::string(powerControlDir / stateFile) << std::endl;
++                stateData = nlohmann::json({});
++                return;
+             }
+-            // We're done with the previous power state for the restore policy, so store
+-            // the current state
+-            savePowerState(powerState);
+-        }
+-    },
+-    "xyz.openbmc_project.Settings",
+-    "/xyz/openbmc_project/control/host0/power_restore_policy",
+-    "org.freedesktop.DBus.Properties", "Get",
+-    "xyz.openbmc_project.Control.Power.RestorePolicy", "PowerRestorePolicy");
+-}
+-
+-static bool requestGPIOEvents(
+-    const std::string& name, const std::function<void()>& handler,
+-    gpiod::line& gpioLine,
+-    boost::asio::posix::stream_descriptor& gpioEventDescriptor)
+-{
+-    // Find the GPIO line
+-    gpioLine = gpiod::find_line(name);
+-    if (!gpioLine)
+-    {
+-        std::cerr << "Failed to find the " << name << " line\n";
+-        return false;
++        }
++        catch (const std::exception &ex)
++        {
++            std::cerr << "Cannot read state file " << std::string(powerControlDir / stateFile) << std::endl;
++            stateData = nlohmann::json({});
++            return;
++        }
+     }
+-
+-    try
++    PersistentState::~PersistentState()
+     {
+-        gpioLine.request(
+-            {"power-control", gpiod::line_request::EVENT_BOTH_EDGES});
++        saveState();
+     }
+-    catch (std::exception& exc)
++    const std::string PersistentState::get(Params parameter)
+     {
+-        std::cerr << "Failed to request events for " << name << exc.what() << "\n";
+-        return false;
++        auto val = stateData.find(getName(parameter));
++        if (val != stateData.end())
++        {
++            return val->get<std::string>();
++        }
++        return getDefault(parameter);
+     }
+-
+-    int gpioLineFd = gpioLine.event_get_fd();
+-    if (gpioLineFd < 0)
++    void PersistentState::set(Params parameter, const std::string &value)
+     {
+-        std::cerr << "Failed to get " << name << " fd\n";
+-        return false;
++        stateData[getName(parameter)] = value;
++        saveState();
+     }
+ 
+-    gpioEventDescriptor.assign(gpioLineFd);
+-
+-    gpioEventDescriptor.async_wait(
+-        boost::asio::posix::stream_descriptor::wait_read,
+-        [&name, handler](const boost::system::error_code ec) {
+-            if (ec)
+-            {
+-                std::cerr << name << " fd handler error: " << ec.message()
+-                          << "\n";
+-                // TODO: throw here to force power-control to restart?
+-                return;
+-            }
+-            handler();
+-        });
+-
+-    return true;
+-}
+-
+-static bool setGPIOOutput(const std::string& name, const int value,
+-                          gpiod::line& gpioLine)
+-{
+-    // Find the GPIO line
+-    gpioLine = gpiod::find_line(name);
+-    if (!gpioLine)
++    const std::string PersistentState::getName(const Params parameter)
+     {
+-        std::cerr << "Failed to find the " << name << " line.\n";
+-        return false;
++        switch (parameter)
++        {
++        case Params::PowerState:
++            return "PowerState";
++        }
++        return "";
+     }
+-
+-    try
++    const std::string PersistentState::getDefault(const Params parameter)
+     {
+-        gpioLine.request({__FUNCTION__, gpiod::line_request::DIRECTION_OUTPUT});
++        switch (parameter)
++        {
++        case Params::PowerState:
++            return "xyz.openbmc_project.State.Chassis.PowerState.Off";
++        }
++        return "";
+     }
+-    catch (std::system_error& exc)
++    void PersistentState::saveState()
+     {
+-        std::cerr << "Error setting gpio as Output: " << name << exc.what() << "\n";
++        std::ofstream appStateStream(powerControlDir / stateFile, std::ios::trunc);
++        if (!appStateStream.is_open())
++        {
++            std::cerr << "Cannot write state file " << std::string(powerControlDir / stateFile) << std::endl;
++            return;
++        }
++        appStateStream << stateData.dump(indentationSize);
+     }
+ 
+-    try
+-    {
+-        // Request GPIO output to specified value
+-        gpioLine.set_value(value);
+-    }
+-    catch (std::exception& exc)
+-    {
+-        std::cerr << "Failed to set value for " << name << exc.what()<< "\n";
+-        return false;
+-    }
++    static constexpr const char *setingsService = "xyz.openbmc_project.Settings";
++    static constexpr const char *powerRestorePolicyIface =
++        "xyz.openbmc_project.Control.Power.RestorePolicy";
++#ifdef USE_ACBOOT
++    static constexpr const char *powerACBootObject =
++        "/xyz/openbmc_project/control/host0/ac_boot";
++    static constexpr const char *powerACBootIface =
++        "xyz.openbmc_project.Common.ACBoot";
++#endif // USE_ACBOOT
+ 
++    namespace match_rules = sdbusplus::bus::match::rules;
++
++    static int powerRestoreConfigHandler(sd_bus_message *m, void *context,
++                                         sd_bus_error *)
++    {
++        if (context == nullptr || m == nullptr)
++        {
++            throw std::runtime_error("Invalid match");
++        }
++        sdbusplus::message::message message(m);
++        PowerRestoreController *powerRestore =
++            static_cast<PowerRestoreController *>(context);
+ 
+-    std::cerr << name << " set to " << std::to_string(value) << "\n";
++        if (std::string(message.get_member()) == "InterfacesAdded")
++        {
++            sdbusplus::message::object_path path;
++            boost::container::flat_map<std::string, dbusPropertiesList> data;
+ 
+-    return true;
+-}
++            message.read(path, data);
+ 
+-static int setGPIOOutputForMs(const std::string& name, const int value,
+-                              const int durationMs)
+-{
+-    // No mask set, so request and set the GPIO normally
+-    gpiod::line gpioLine;
+-    if (!setGPIOOutput(name, value, gpioLine))
+-    {
+-        return -1;
+-    }
+-    gpioAssertTimer.expires_after(std::chrono::milliseconds(durationMs));
+-    gpioAssertTimer.async_wait(
+-        [gpioLine, value, name](const boost::system::error_code ec) {
+-            // Set the GPIO line back to the opposite value
+-            gpioLine.set_value(!value);
+-            std::cerr << name << " released\n";
+-            if (ec)
++            for (auto &[iface, properties] : data)
+             {
+-                // operation_aborted is expected if timer is canceled before
+-                // completion.
+-                if (ec != boost::asio::error::operation_aborted)
++                if ((iface == powerRestorePolicyIface)
++#ifdef USE_ACBOOT
++                    || (iface == powerACBootIface)
++#endif // USE_ACBOOT
++                )
+                 {
+-                    std::cerr << name << " async_wait failed: " << ec.message()
+-                              << "\n";
++                    powerRestore->setProperties(properties);
+                 }
+             }
+-        });
+-    return 0;
+-}
+-
+-static void powerOn()
+-{
+-    setGPIOOutputForMs("ASSERT_PWR_BTN_L", 0, powerPulseTimeMs);
+-}
+-
+-static void gracefulPowerOff()
+-{
+-    setGPIOOutputForMs("ASSERT_PWR_BTN_L", 0, powerPulseTimeMs);
+-}
+-
+-static void forcePowerOff()
+-{
+-    setGPIOOutputForMs("ASSERT_PWR_BTN_L", 0, forceOffPulseTimeMs);
+-    return;
+-}
++        }
++        else if (std::string(message.get_member()) == "PropertiesChanged")
++        {
++            std::string interfaceName;
++            dbusPropertiesList propertiesChanged;
+ 
+-static void reset()
+-{
+-    setGPIOOutputForMs("ASSERT_RST_BTN_L", 0, resetPulseTimeMs);
+-}
++            message.read(interfaceName, propertiesChanged);
+ 
+-template <typename T>
+-T getProperty(sdbusplus::bus::bus& bus, const char* service, const char* path,
+-              const char* interface, const char* propertyName)
+-{
+-    auto method = bus.new_method_call(service, path,
+-                                      "org.freedesktop.DBus.Properties", "Get");
+-    method.append(interface, propertyName);
+-    std::variant<T> value{};
+-    try
+-    {
+-        auto reply = bus.call(method);
+-        reply.read(value);
+-    }
+-    catch (const sdbusplus::exception::SdBusError& ex)
+-    {
+-        sd_journal_print(LOG_ERR, "GetProperty call failed \n");
++            powerRestore->setProperties(propertiesChanged);
++        }
++        return 1;
+     }
+-    return std::get<T>(value);
+-}
+ 
+-static bool isTurinSOC()
+-{
+-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+-    bool ret = false;
+-    std::string family = getProperty<std::string>(bus,
+-                    "xyz.openbmc_project.Inventory.Manager",
+-                    "/xyz/openbmc_project/inventory/system/processor/P0",
+-                    "xyz.openbmc_project.Inventory.Item.Cpu", "Family");
+-    sd_journal_print(LOG_INFO, "SOC Family:  %s %d \n", family.c_str(), family.size() );
+-
+-    if(family == TURIN_FAMILY)
+-        ret = true;
+-    return ret;
+-}
+-
+-static bool isTurinC0()
+-{
+-    sdbusplus::bus::bus bus = sdbusplus::bus::new_default();
+-    bool ret = false;
+-
+-    std::string model = getProperty<std::string>(bus,
+-                    "xyz.openbmc_project.Inventory.Manager",
+-                    "/xyz/openbmc_project/inventory/system/processor/P0",
+-                    "xyz.openbmc_project.Inventory.Item.Cpu", "Model");
+-    sd_journal_print(LOG_INFO, "Turin SOC Model:  %s (%d) \n", model.c_str(), model.size() );
+-
+-    if((model == TURIN_MODEL_A) ||
+-       (model == TURIN_MODEL_B))
+-        ret = false;
+-    else
+-        ret = true;
+-    return ret;
+-}
++    void PowerRestoreController::run()
++    {
++        std::string powerRestorePolicyObject = "/xyz/openbmc_project/control/host" +
++                                               node + "/power_restore_policy";
++        powerRestorePolicyLog();
++        // this list only needs to be created once
++        if (matches.empty())
++        {
++            matches.emplace_back(
++                *conn,
++                match_rules::interfacesAdded() +
++                    match_rules::argNpath(0, powerRestorePolicyObject) +
++                    match_rules::sender(setingsService),
++                powerRestoreConfigHandler, this);
++#ifdef USE_ACBOOT
++            matches.emplace_back(*conn,
++                                 match_rules::interfacesAdded() +
++                                     match_rules::argNpath(0, powerACBootObject) +
++                                     match_rules::sender(setingsService),
++                                 powerRestoreConfigHandler, this);
++            matches.emplace_back(*conn,
++                                 match_rules::propertiesChanged(powerACBootObject,
++                                                                powerACBootIface) +
++                                     match_rules::sender(setingsService),
++                                 powerRestoreConfigHandler, this);
++#endif // USE_ACBOOT
++        }
+ 
+-static void RSMreset()
+-{
+-    // assert RSM Reset for Turin A and B
+-    if((isTurinSOC() == true) &&
+-       (isTurinC0()  == false))
+-        setGPIOOutputForMs("RSMRST", 1, resetPulseTimeMs);
++        // Check if it's already on DBus
++        conn->async_method_call(
++            [this](boost::system::error_code ec,
++                   const dbusPropertiesList properties)
++            {
++                if (ec)
++                {
++                    return;
++                }
++                setProperties(properties);
++            },
++            setingsService, powerRestorePolicyObject,
++            "org.freedesktop.DBus.Properties", "GetAll", powerRestorePolicyIface);
+ 
+-    // log to redfish
+-    RSMresetLog();
+-    std::cerr << "RSM Reset action completed\n";
+-}
++#ifdef USE_ACBOOT
++        // Check if it's already on DBus
++        conn->async_method_call(
++            [this](boost::system::error_code ec,
++                   const dbusPropertiesList properties)
++            {
++                if (ec)
++                {
++                    return;
++                }
++                setProperties(properties);
++            },
++            setingsService, powerACBootObject, "org.freedesktop.DBus.Properties",
++            "GetAll", powerACBootIface);
++#endif
++    }
+ 
+-static void gracefulPowerOffTimerStart()
+-{
+-    std::cerr << "Graceful power-off timer started\n";
+-    gracefulPowerOffTimer.expires_after(
+-        std::chrono::milliseconds(gracefulPowerOffTimeMs));
+-    gracefulPowerOffTimer.async_wait([](const boost::system::error_code ec) {
++    void PowerRestoreController::setProperties(const dbusPropertiesList &props)
++    {
++        for (auto &[property, propValue] : props)
++        {
++            if (property == "PowerRestorePolicy")
++            {
++                const std::string *value = std::get_if<std::string>(&propValue);
++                if (value == nullptr)
++                {
++                    std::cerr << "Unable to read Power Restore Policy" << std::endl;
++                    continue;
++                }
++                powerRestorePolicy = *value;
++            }
++            else if (property == "PowerRestoreDelay")
++            {
++                const uint64_t *value = std::get_if<uint64_t>(&propValue);
++                if (value == nullptr)
++                {
++                    std::cerr << "Unable to read Power Restore Delay" << std::endl;
++                    continue;
++                }
++                powerRestoreDelay = *value / 1000000; // usec to sec
++            }
++#ifdef USE_ACBOOT
++            else if (property == "ACBoot")
++            {
++                const std::string *value = std::get_if<std::string>(&propValue);
++                if (value == nullptr)
++                {
++                    std::cerr << "Unable to read AC Boot status" << std::endl;
++                    continue;
++                }
++                acBoot = *value;
++            }
++#endif // USE_ACBOOT
++        }
++        invokeIfReady();
++    }
++
++    void PowerRestoreController::invokeIfReady()
++    {
++        if ((powerRestorePolicy.empty()) || (powerRestoreDelay < 0))
++        {
++            return;
++        }
++#ifdef USE_ACBOOT
++        if (acBoot.empty() || acBoot == "Unknown")
++        {
++            return;
++        }
++#endif
++
++        matches.clear();
++        if (!timerFired)
++        {
++            // Calculate the delay from now to meet the requested delay
++            // Subtract the approximate uboot time
++            static constexpr const int ubootSeconds = 20;
++            int delay = powerRestoreDelay - ubootSeconds;
++            // Subtract the time since boot
++            struct sysinfo info = {};
++            if (sysinfo(&info) == 0)
++            {
++                delay -= info.uptime;
++            }
++
++            if (delay > 0)
++            {
++                powerRestoreTimer.expires_after(std::chrono::seconds(delay));
++                std::cerr << "Power Restore delay of " << delay << " seconds started" << std::endl;
++                powerRestoreTimer.async_wait(
++                    [this](const boost::system::error_code ec)
++                    {
++                        if (ec)
++                        {
++                            // operation_aborted is expected if timer is canceled before
++                            // completion.
++                            if (ec == boost::asio::error::operation_aborted)
++                            {
++                                return;
++                            }
++                            std::cerr << "power restore policy async_wait failed: " << ec.message() << std::endl;
++                        }
++                        else
++                        {
++                            std::cerr << "Power Restore delay timer expired" << std::endl;
++                        }
++                        invoke();
++                    });
++                timerFired = true;
++            }
++            else
++            {
++                invoke();
++            }
++        }
++    }
++
++    void PowerRestoreController::invoke()
++    {
++        // we want to run Power Restore only once
++        if (policyInvoked)
++        {
++            return;
++        }
++        policyInvoked = true;
++
++        std::cerr << "Invoking Power Restore Policy " << powerRestorePolicy << std::endl;
++        if (powerRestorePolicy ==
++            "xyz.openbmc_project.Control.Power.RestorePolicy.Policy.AlwaysOn")
++        {
++            sendPowerControlEvent(Event::powerOnRequest);
++            setRestartCauseProperty(getRestartCause(RestartCause::powerPolicyOn));
++        }
++        else if (powerRestorePolicy ==
++                 "xyz.openbmc_project.Control.Power.RestorePolicy.Policy.Restore")
++        {
++            if (wasPowerDropped())
++            {
++                std::cerr << "Power was dropped, restoring Host On state" << std::endl;
++                sendPowerControlEvent(Event::powerOnRequest);
++                setRestartCauseProperty(
++                    getRestartCause(RestartCause::powerPolicyRestore));
++            }
++            else
++            {
++                std::cerr << "No power drop, restoring Host Off state" << std::endl;
++            }
++        }
++        // We're done with the previous power state for the restore policy, so store
++        // the current state
++        savePowerState(powerState);
++    }
++
++    bool PowerRestoreController::wasPowerDropped()
++    {
++        std::string state = appState.get(PersistentState::Params::PowerState);
++        return state == "xyz.openbmc_project.State.Chassis.PowerState.On";
++    }
++
++    static void waitForGPIOEvent(const std::string &name,
++                                 const std::function<void(bool)> &eventHandler,
++                                 gpiod::line &line,
++                                 boost::asio::posix::stream_descriptor &event)
++    {
++        event.async_wait(boost::asio::posix::stream_descriptor::wait_read,
++                         [&name, eventHandler, &line,
++                          &event](const boost::system::error_code ec)
++                         {
++                             if (ec)
++                             {
++                                 std::cerr << name << " fd handler error: " << ec.message() << std::endl;
++                                 // TODO: throw here to force power-control to
++                                 // restart?
++                                 return;
++                             }
++                             gpiod::line_event line_event = line.event_read();
++                             eventHandler(line_event.event_type == gpiod::line_event::RISING_EDGE);
++                             waitForGPIOEvent(name, eventHandler, line, event);
++                         });
++    }
++
++    static bool requestGPIOEvents(
++        const std::string &name, const std::function<void(bool)> &handler,
++        gpiod::line &gpioLine,
++        boost::asio::posix::stream_descriptor &gpioEventDescriptor)
++    {
++        // Find the GPIO line
++        gpioLine = gpiod::find_line(name);
++        if (!gpioLine)
++        {
++            std::cerr << "Failed to find the " << name << " line" << std::endl;
++            return false;
++        }
++
++        try
++        {
++            gpioLine.request({appName, gpiod::line_request::EVENT_BOTH_EDGES, {}});
++        }
++        catch (const std::exception &e)
++        {
++            std::cerr << "Failed to request events for " << name << ":" << e.what() << std::endl;
++            return false;
++        }
++
++        int gpioLineFd = gpioLine.event_get_fd();
++        if (gpioLineFd < 0)
++        {
++            std::cerr << "Failed to get " << name << " fd" << std::endl;
++            return false;
++        }
++
++        gpioEventDescriptor.assign(gpioLineFd);
++
++        waitForGPIOEvent(name, handler, gpioLine, gpioEventDescriptor);
++        return true;
++    }
++
++    static bool setGPIOOutput(const std::string &name, const int value,
++                              gpiod::line &gpioLine)
++    {
++        // Find the GPIO line
++        gpioLine = gpiod::find_line(name);
++        if (!gpioLine)
++        {
++            std::cerr << "Failed to find the " << name << " line" << std::endl;
++            return false;
++        }
++
++        // Request GPIO output to specified value
++        try
++        {
++            gpioLine.request({appName, gpiod::line_request::DIRECTION_OUTPUT, {}},
++                             value);
++        }
++        catch (const std::exception &e)
++        {
++            std::cerr << "Failed to request " << name << " output: " << e.what() << std::endl;
++            return false;
++        }
++
++        std::cerr << name << " set to " << value << std::endl;
++        return true;
++    }
++
++    static int setMaskedGPIOOutputForMs(gpiod::line &maskedGPIOLine,
++                                        const std::string &name, const int value,
++                                        const int durationMs)
++    {
++        // Set the masked GPIO line to the specified value
++        maskedGPIOLine.set_value(value);
++        std::cerr << name << " set to " << value << std::endl;
++        gpioAssertTimer.expires_after(std::chrono::milliseconds(durationMs));
++        gpioAssertTimer.async_wait(
++            [maskedGPIOLine, value, name](const boost::system::error_code ec)
++            {
++                // Set the masked GPIO line back to the opposite value
++                maskedGPIOLine.set_value(!value);
++                std::cerr << name << " released" << std::endl;
++                if (ec)
++                {
++                    // operation_aborted is expected if timer is canceled before
++                    // completion.
++                    if (ec != boost::asio::error::operation_aborted)
++                    {
++                        std::cerr << name << " async_wait failed: " << ec.message() << std::endl;
++                    }
++                }
++            });
++        return 0;
++    }
++
++    static int setGPIOOutputForMs(const ConfigData &config, const int value,
++                                  const int durationMs)
++    {
++        // If the requested GPIO is masked, use the mask line to set the output
++        if (powerButtonMask && config.lineName == powerOutConfig.lineName)
++        {
++            return setMaskedGPIOOutputForMs(powerButtonMask, config.lineName, value,
++                                            durationMs);
++        }
++        if (resetButtonMask && config.lineName == resetOutConfig.lineName)
++        {
++            return setMaskedGPIOOutputForMs(resetButtonMask, config.lineName, value,
++                                            durationMs);
++        }
++
++        // No mask set, so request and set the GPIO normally
++        gpiod::line gpioLine;
++        if (!setGPIOOutput(config.lineName, value, gpioLine))
++        {
++            return -1;
++        }
++        const std::string name = config.lineName;
++
++        gpioAssertTimer.expires_after(std::chrono::milliseconds(durationMs));
++        gpioAssertTimer.async_wait(
++            [gpioLine, value, name](const boost::system::error_code ec)
++            {
++                // Set the GPIO line back to the opposite value
++                gpioLine.set_value(!value);
++                std::cerr << name << " released" << std::endl;
++                if (ec)
++                {
++                    // operation_aborted is expected if timer is canceled before
++                    // completion.
++                    if (ec != boost::asio::error::operation_aborted)
++                    {
++                        std::cerr << name << " async_wait failed: " << ec.message() << std::endl;
++                    }
++                }
++            });
++        return 0;
++    }
++
++    static int assertGPIOForMs(const ConfigData &config, const int durationMs)
++    {
++        return setGPIOOutputForMs(config, config.polarity, durationMs);
++    }
++
++    static void powerOn()
++    {
++        assertGPIOForMs(powerOutConfig, TimerMap["PowerPulseMs"]);
++    }
++#ifdef CHASSIS_SYSTEM_RESET
++    static int slotPowerOn()
++    {
++        if (power_control::slotPowerState != power_control::SlotPowerState::on)
++        {
++            slotPowerLine.set_value(1);
++
++            if (slotPowerLine.get_value() > 0)
++            {
++                setSlotPowerState(SlotPowerState::on);
++                std::cerr << "Slot Power is switched On" << std::endl;
++            }
++            else
++            {
++                return -1;
++            }
++        }
++        else
++        {
++            std::cerr << "Slot Power is already in 'On' state" << std::endl;
++            return -1;
++        }
++        return 0;
++    }
++    static int slotPowerOff()
++    {
++        if (power_control::slotPowerState != power_control::SlotPowerState::off)
++        {
++            slotPowerLine.set_value(0);
++
++            if (!(slotPowerLine.get_value() > 0))
++            {
++                setSlotPowerState(SlotPowerState::off);
++                setPowerState(PowerState::off);
++                std::cerr << "Slot Power is switched Off" << std::endl;
++            }
++            else
++            {
++                return -1;
++            }
++        }
++        else
++        {
++            std::cerr << "Slot Power is already in 'Off' state" << std::endl;
++            return -1;
++        }
++        return 0;
++    }
++    static void slotPowerCycle()
++    {
++        std::cerr << "Slot Power Cycle started" << std::endl;
++        slotPowerOff();
++        slotPowerCycleTimer.expires_after(
++            std::chrono::milliseconds(TimerMap["SlotPowerCycleMs"]));
++        slotPowerCycleTimer.async_wait([](const boost::system::error_code ec)
++                                       {
++                                           if (ec)
++                                           {
++                                               if (ec != boost::asio::error::operation_aborted)
++                                               {
++                                                   std::cerr <<
++                                                   "Slot Power cycle timer async_wait failed: " <<
++                                                   ec.message() << std::endl;
++                                               }
++                                               std::cerr << "Slot Power cycle timer canceled" << std::endl;
++                                               return;
++                                           }
++                                           std::cerr << "Slot Power cycle timer completed" << std::endl;
++                                           slotPowerOn();
++                                           std::cerr << "Slot Power Cycle Completed" << std::endl; });
++    }
++#endif
++    static void gracefulPowerOff()
++    {
++        assertGPIOForMs(powerOutConfig, TimerMap["PowerPulseMs"]);
++    }
++
++    static void forcePowerOff()
++    {
++        if (assertGPIOForMs(powerOutConfig, TimerMap["ForceOffPulseMs"]) < 0)
++        {
++            return;
++        }
++
++        // If the force off timer expires, then the power-button override failed
++        gpioAssertTimer.async_wait([](const boost::system::error_code ec)
++                                   {
++                                       if (ec)
++                                       {
++                                           // operation_aborted is expected if timer is canceled before
++                                           // completion.
++                                           if (ec != boost::asio::error::operation_aborted)
++                                           {
++                                               std::cerr << "Force power off async_wait failed: " << ec.message() << std::endl;
++                                           }
++                                           return;
++                                       }
++
++                                       std::cerr << "Power-button override failed. Not sure what to do now." << std::endl; });
++    }
++
++    static void reset()
++    {
++        assertGPIOForMs(resetOutConfig, TimerMap["ResetPulseMs"]);
++    }
++
++    static void gracefulPowerOffTimerStart()
++    {
++        std::cerr << "Graceful power-off timer started" << std::endl;
++        gracefulPowerOffTimer.expires_after(
++            std::chrono::seconds(TimerMap["GracefulPowerOffS"]));
++        gracefulPowerOffTimer.async_wait([](const boost::system::error_code ec)
++                                         {
+         if (ec)
+         {
+             // operation_aborted is expected if timer is canceled before
+             // completion.
+             if (ec != boost::asio::error::operation_aborted)
+             {
+-                std::cerr << "Graceful power-off async_wait failed: "
+-                          << ec.message() << "\n";
++                std::cerr << "Graceful power-off async_wait failed: {ERROR_MSG}" << ec.message() << std::endl;
+             }
+-            std::cerr << "Graceful power-off timer canceled\n";
++            std::cerr << "Graceful power-off timer canceled" << std::endl;
+             return;
+         }
+-        std::cerr << "Graceful power-off timer completed\n";
+-        sendPowerControlEvent(Event::gracefulPowerOffTimerExpired);
+-    });
+-}
++        std::cerr << "Graceful power-off timer completed" << std::endl;
++        sendPowerControlEvent(Event::gracefulPowerOffTimerExpired); });
++    }
+ 
+-static void powerCycleTimerStart()
+-{
+-    std::cerr << "Power-cycle timer started\n";
+-    powerCycleTimer.expires_after(std::chrono::milliseconds(powerCycleTimeMs));
+-    powerCycleTimer.async_wait([](const boost::system::error_code ec) {
++    static void powerCycleTimerStart()
++    {
++        std::cerr << "Power-cycle timer started" << std::endl;
++        powerCycleTimer.expires_after(
++            std::chrono::milliseconds(TimerMap["PowerCycleMs"]));
++        powerCycleTimer.async_wait([](const boost::system::error_code ec)
++                                   {
+         if (ec)
+         {
+             // operation_aborted is expected if timer is canceled before
+             // completion.
+             if (ec != boost::asio::error::operation_aborted)
+             {
+-                std::cerr << "Power-cycle async_wait failed: " << ec.message()
+-                          << "\n";
++                std::cerr << "Power-cycle async_wait failed: " << ec.message() << std::endl;
+             }
+-            std::cerr << "Power-cycle timer canceled\n";
++            std::cerr << "Power-cycle timer canceled" << std::endl;
+             return;
+         }
+-        std::cerr << "Power-cycle timer completed\n";
+-        sendPowerControlEvent(Event::powerCycleTimerExpired);
+-    });
+-}
+-
+-static void psPowerOKWatchdogTimerStart()
+-{
+-    std::cerr << "power supply power OK watchdog timer started\n";
+-    psPowerOKWatchdogTimer.expires_after(
+-        std::chrono::milliseconds(psPowerOKWatchdogTimeMs));
+-    psPowerOKWatchdogTimer.async_wait(
+-        [](const boost::system::error_code ec) {
+-            if (ec)
+-            {
+-                // operation_aborted is expected if timer is canceled before
+-                // completion.
+-                if (ec != boost::asio::error::operation_aborted)
+-                {
+-                    std::cerr
+-                        << "power supply power OK watchdog async_wait failed: "
+-                        << ec.message() << "\n";
+-                }
+-                std::cerr << "power supply power OK watchdog timer canceled\n";
+-                return;
+-            }
+-            std::cerr << "power supply power OK watchdog timer expired\n";
+-            sendPowerControlEvent(Event::psPowerOKWatchdogTimerExpired);
+-        });
+-}
++        std::cerr << "Power-cycle timer completed" << std::endl;
++        sendPowerControlEvent(Event::powerCycleTimerExpired); });
++    }
+ 
+-static void psPowerOKRampDownTimerStart()
+-{
+-    std::cerr << "power supply power OK RampDown timer started\n";
+-    psPowerOKRampDownTimer.expires_after(
+-        std::chrono::milliseconds(psPowerOKRampDownTimeMs));
+-    psPowerOKRampDownTimer.async_wait(
+-        [](const boost::system::error_code ec) {
+-            if (ec)
++    static void psPowerOKWatchdogTimerStart()
++    {
++        std::cerr << "power supply power OK watchdog timer started" << std::endl;
++        psPowerOKWatchdogTimer.expires_after(
++            std::chrono::milliseconds(TimerMap["PsPowerOKWatchdogMs"]));
++        psPowerOKWatchdogTimer.async_wait([](const boost::system::error_code ec)
++                                          {
++        if (ec)
++        {
++            // operation_aborted is expected if timer is canceled before
++            // completion.
++            if (ec != boost::asio::error::operation_aborted)
+             {
+-                // operation_aborted is expected if timer is canceled before
+-                // completion.
+-                if (ec != boost::asio::error::operation_aborted)
+-                {
+-                    std::cerr
+-                        << "power supply power OK RampDown async_wait failed: "
+-                        << ec.message() << "\n";
+-                }
+-                std::cerr << "power supply power OK RampDown timer canceled\n";
+-                return;
++                std::cerr << "power supply power OK watchdog async_wait failed: "<<  ec.message() << std::endl;
+             }
+-            std::cerr << "power supply power OK RampDown timer expired\n";
+-            sendPowerControlEvent(Event::psPowerOKRampDownTimerExpired);
+-        });
+-}
++            std::cerr << "power supply power OK watchdog timer canceled"<< std::endl;
++            return;
++        }
++        std::cerr << "power supply power OK watchdog timer expired" << std::endl;
++        sendPowerControlEvent(Event::psPowerOKWatchdogTimerExpired); });
++    }
+ 
+-static void warmResetCheckTimerStart()
+-{
+-    std::cerr << "Warm reset check timer started\n";
+-    warmResetCheckTimer.expires_after(
+-        std::chrono::milliseconds(warmResetCheckTimeMs));
+-    warmResetCheckTimer.async_wait([](const boost::system::error_code ec) {
++    static void warmResetCheckTimerStart()
++    {
++        std::cerr << "Warm reset check timer started" << std::endl;
++        warmResetCheckTimer.expires_after(
++            std::chrono::milliseconds(TimerMap["WarmResetCheckMs"]));
++        warmResetCheckTimer.async_wait([](const boost::system::error_code ec)
++                                       {
+         if (ec)
+         {
+             // operation_aborted is expected if timer is canceled before
+             // completion.
+             if (ec != boost::asio::error::operation_aborted)
+             {
+-                std::cerr << "Warm reset check async_wait failed: "
+-                          << ec.message() << "\n";
++                std::cerr << "Warm reset check async_wait failed: " << ec.message() << std::endl;
+             }
+-            std::cerr << "Warm reset check timer canceled\n";
++            std::cerr << "Warm reset check timer canceled" << std::endl;
+             return;
+         }
+-        std::cerr << "Warm reset check timer completed\n";
+-        sendPowerControlEvent(Event::warmResetDetected);
+-    });
+-}
++        std::cerr << "Warm reset check timer completed" << std::endl;
++        sendPowerControlEvent(Event::warmResetDetected); });
++    }
+ 
+-static void pohCounterTimerStart()
+-{
+-    std::cerr << "POH timer started\n";
+-    // Set the time-out as 1 hour, to align with POH command in ipmid
+-    pohCounterTimer.expires_after(std::chrono::hours(1));
+-    pohCounterTimer.async_wait([](const boost::system::error_code& ec) {
++    static void pohCounterTimerStart()
++    {
++        std::cerr << "POH timer started" << std::endl;
++        // Set the time-out as 1 hour, to align with POH command in ipmid
++        pohCounterTimer.expires_after(std::chrono::hours(1));
++        pohCounterTimer.async_wait([](const boost::system::error_code &ec)
++                                   {
+         if (ec)
+         {
+             // operation_aborted is expected if timer is canceled before
+             // completion.
+             if (ec != boost::asio::error::operation_aborted)
+             {
+-                std::cerr << "POH timer async_wait failed: " << ec.message()
+-                          << "\n";
++                std::cerr << "POH timer async_wait failed: " << ec.message() << std::endl;
+             }
+-            std::cerr << "POH timer canceled\n";
++            std::cerr << "POH timer canceled" << std::endl;
+             return;
+         }
+ 
+@@ -1097,144 +1514,192 @@ static void pohCounterTimerStart()
+         conn->async_method_call(
+             [](boost::system::error_code ec,
+                const std::variant<uint32_t>& pohCounterProperty) {
++            if (ec)
++            {
++                std::cerr << "error getting poh counter" << std::endl;
++                return;
++            }
++            const uint32_t* pohCounter =
++                std::get_if<uint32_t>(&pohCounterProperty);
++            if (pohCounter == nullptr)
++            {
++                std::cerr << "unable to read poh counter" << std::endl;
++                return;
++            }
++
++            conn->async_method_call(
++                [](boost::system::error_code ec) {
+                 if (ec)
+                 {
+-                    std::cerr << "error to get poh counter\n";
+-                    return;
+-                }
+-                const uint32_t* pohCounter =
+-                    std::get_if<uint32_t>(&pohCounterProperty);
+-                if (pohCounter == nullptr)
+-                {
+-                    std::cerr << "unable to read poh counter\n";
+-                    return;
++                    std::cerr << "failed to set poh counter" << std::endl;
+                 }
+-
+-                conn->async_method_call(
+-                    [](boost::system::error_code ec) {
+-                        if (ec)
+-                        {
+-                            std::cerr << "failed to set poh counter\n";
+-                        }
+-                    },
+-                    "xyz.openbmc_project.Settings",
+-                    "/xyz/openbmc_project/state/chassis0",
+-                    "org.freedesktop.DBus.Properties", "Set",
+-                    "xyz.openbmc_project.State.PowerOnHours", "POHCounter",
+-                    std::variant<uint32_t>(*pohCounter + 1));
+             },
++                "xyz.openbmc_project.Settings",
++                "/xyz/openbmc_project/state/chassis0",
++                "org.freedesktop.DBus.Properties", "Set",
++                "xyz.openbmc_project.State.PowerOnHours", "POHCounter",
++                std::variant<uint32_t>(*pohCounter + 1));
++        },
+             "xyz.openbmc_project.Settings",
+             "/xyz/openbmc_project/state/chassis0",
+             "org.freedesktop.DBus.Properties", "Get",
+             "xyz.openbmc_project.State.PowerOnHours", "POHCounter");
+ 
+-        pohCounterTimerStart();
+-    });
+-}
+-
+-static void currentHostStateMonitor()
+-{
+-    if (getHostState(powerState) ==
+-        "xyz.openbmc_project.State.Host.HostState.Running")
+-    {
+-        pohCounterTimerStart();
+-        // Clear the restart cause set for the next restart
+-        clearRestartCause();
+-    }
+-    else
+-    {
+-        pohCounterTimer.cancel();
+-        // Set the restart cause set for this restart
+-        setRestartCause();
++        pohCounterTimerStart(); });
+     }
+ 
+-    static auto match = sdbusplus::bus::match::match(
+-        *conn,
+-        "type='signal',member='PropertiesChanged', "
+-        "interface='org.freedesktop.DBus.Properties', "
+-        "arg0='xyz.openbmc_project.State.Host'",
+-        [](sdbusplus::message::message& message) {
+-            std::string intfName;
+-            std::map<std::string, std::variant<std::string>> properties;
+-
+-            try
+-            {
+-                message.read(intfName, properties);
+-            }
+-            catch (std::exception& e)
+-            {
+-                std::cerr << "Unable to read host state\n";
+-                return;
+-            }
+-            if (properties.empty())
+-            {
+-                std::cerr << "ERROR: Empty PropertiesChanged signal received\n";
+-                return;
+-            }
++    static void currentHostStateMonitor()
++    {
++        if (getHostState(powerState) ==
++            "xyz.openbmc_project.State.Host.HostState.Running")
++        {
++            pohCounterTimerStart();
++            // Clear the restart cause set for the next restart
++            clearRestartCause();
++        }
++        else
++        {
++            pohCounterTimer.cancel();
++            // Set the restart cause set for this restart
++            setRestartCause();
++        }
+ 
+-            // We only want to check for CurrentHostState
+-            if (properties.begin()->first != "CurrentHostState")
+-            {
+-                return;
+-            }
+-            std::string* currentHostState =
+-                std::get_if<std::string>(&(properties.begin()->second));
+-            if (currentHostState == nullptr)
+-            {
+-                std::cerr << properties.begin()->first << " property invalid\n";
+-                return;
+-            }
++        static auto match =
++            sdbusplus::bus::match::match(*conn,
++                                         "type='signal',member='PropertiesChanged', "
++                                         "interface='org.freedesktop.DBus.Properties', "
++                                         "arg0='xyz.openbmc_project.State.Host'",
++                                         [](sdbusplus::message::message &message)
++                                         {
++                                             std::string intfName;
++                                             std::map<std::string, std::variant<std::string>> properties;
++
++                                             try
++                                             {
++                                                 message.read(intfName, properties);
++                                             }
++                                             catch (const std::exception &e)
++                                             {
++                                                 std::cerr << "Unable to read host state: " << e.what() << std::endl;
++                                                 return;
++                                             }
++                                             if (properties.empty())
++                                             {
++                                                 std::cerr << "ERROR: Empty PropertiesChanged signal received" << std::endl;
++                                                 return;
++                                             }
++
++                                             // We only want to check for CurrentHostState
++                                             if (properties.begin()->first != "CurrentHostState")
++                                             {
++                                                 return;
++                                             }
++                                             std::string *currentHostState =
++                                                 std::get_if<std::string>(&(properties.begin()->second));
++                                             if (currentHostState == nullptr)
++                                             {
++                                                 std::cerr << properties.begin()->first << " property invalid" << std::endl;
++                                                 return;
++                                             }
++
++                                             if (*currentHostState ==
++                                                 "xyz.openbmc_project.State.Host.HostState.Running")
++                                             {
++                                                 pohCounterTimerStart();
++                                                 // Clear the restart cause set for the next restart
++                                                 clearRestartCause();
++                                                 sd_journal_send("MESSAGE=Host system DC power is on", "PRIORITY=%i",
++                                                                 LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++                                                                 "OpenBMC.0.1.DCPowerOn", NULL);
++                                             }
++                                             else
++                                             {
++                                                 pohCounterTimer.cancel();
++                                                 // POST_COMPLETE GPIO event is not working in some platforms
++                                                 // when power state is changed to OFF. This resulted in
++                                                 // 'OperatingSystemState' to stay at 'Standby', even though
++                                                 // system is OFF. Set 'OperatingSystemState' to 'Inactive'
++                                                 // if HostState is trurned to OFF.
++                                                 setOperatingSystemState(OperatingSystemStateStage::Inactive);
++
++                                                 // Set the restart cause set for this restart
++                                                 setRestartCause();
++#ifdef USE_ACBOOT
++                                                 resetACBootProperty();
++#endif // USE_ACBOOT
++                                                 sd_journal_send("MESSAGE=Host system DC power is off",
++                                                                 "PRIORITY=%i", LOG_INFO, "REDFISH_MESSAGE_ID=%s",
++                                                                 "OpenBMC.0.1.DCPowerOff", NULL);
++                                             }
++                                         });
++    }
+ 
+-            if (*currentHostState ==
+-                "xyz.openbmc_project.State.Host.HostState.Running")
+-            {
+-                pohCounterTimerStart();
+-                // Clear the restart cause set for the next restart
+-                clearRestartCause();
+-                sd_journal_send("MESSAGE=Host system DC power is on",
+-                                "PRIORITY=%i", LOG_INFO,
+-                                "REDFISH_MESSAGE_ID=%s",
+-                                "OpenBMC.0.1.DCPowerOn", NULL);
+-            }
+-            else
++    static void sioPowerGoodWatchdogTimerStart()
++    {
++        std::cerr << "SIO power good watchdog timer started" << std::endl;
++        sioPowerGoodWatchdogTimer.expires_after(
++            std::chrono::milliseconds(TimerMap["SioPowerGoodWatchdogMs"]));
++        sioPowerGoodWatchdogTimer.async_wait(
++            [](const boost::system::error_code ec)
+             {
+-                pohCounterTimer.cancel();
+-                // POST_COMPLETE GPIO event is not working in some platforms
+-                // when power state is changed to OFF. This resulted in
+-                // 'OperatingSystemState' to stay at 'Standby', even though
+-                // system is OFF. Set 'OperatingSystemState' to 'Inactive'
+-                // if HostState is trurned to OFF.
+-                osIface->set_property("OperatingSystemState",
+-                                      std::string("Inactive"));
+-
+-                // Set the restart cause set for this restart
+-                setRestartCause();
+-                sd_journal_send("MESSAGE=Host system DC power is off",
+-                                "PRIORITY=%i", LOG_INFO,
+-                                "REDFISH_MESSAGE_ID=%s",
+-                                "OpenBMC.0.1.DCPowerOff", NULL);
+-            }
+-        });
+-}
++                if (ec)
++                {
++                    // operation_aborted is expected if timer is canceled before
++                    // completion.
++                    if (ec != boost::asio::error::operation_aborted)
++                    {
++                        std::cerr << "SIO power good watchdog async_wait failed: " << ec.message() << std::endl;
++                    }
++                    std::cerr << "SIO power good watchdog timer canceled" << std::endl;
++                    return;
++                }
++                std::cerr << "SIO power good watchdog timer completed" << std::endl;
++                sendPowerControlEvent(Event::sioPowerGoodWatchdogTimerExpired);
++            });
++    }
+ 
+-static void powerStateOn(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateOn(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKDeAssert:
+             setPowerState(PowerState::off);
++            // DC power is unexpectedly lost, beep
++            beep(beepPowerFail);
++            break;
++        case Event::sioS5Assert:
++            setPowerState(PowerState::transitionToOff);
++#if IGNORE_SOFT_RESETS_DURING_POST
++            // Only recognize soft resets once host gets past POST COMPLETE
++            if (operatingSystemState != OperatingSystemStateStage::Standby)
++            {
++                ignoreNextSoftReset = true;
++            }
++#endif
++            addRestartCause(RestartCause::softReset);
++            break;
++#if USE_PLT_RST
++        case Event::pltRstAssert:
++#else
++        case Event::postCompleteDeAssert:
++#endif
++            setPowerState(PowerState::checkForWarmReset);
++#if IGNORE_SOFT_RESETS_DURING_POST
++            // Only recognize soft resets once host gets past POST COMPLETE
++            if (operatingSystemState != OperatingSystemStateStage::Standby)
++            {
++                ignoreNextSoftReset = true;
++            }
++#endif
++            addRestartCause(RestartCause::softReset);
++            warmResetCheckTimerStart();
+             break;
+         case Event::powerButtonPressed:
+             setPowerState(PowerState::gracefulTransitionToOff);
+             gracefulPowerOffTimerStart();
+             break;
+-        case Event::resetButtonPressed:
+-            setPowerState(PowerState::checkForWarmReset);
+-            warmResetCheckTimerStart();
+-            break;
+         case Event::powerOffRequest:
+-            psPowerOKRampDownTimerStart();
+             setPowerState(PowerState::transitionToOff);
+             forcePowerOff();
+             break;
+@@ -1252,44 +1717,96 @@ static void powerStateOn(const Event event)
+             gracefulPowerOffTimerStart();
+             gracefulPowerOff();
+             break;
++        case Event::resetButtonPressed:
++            setPowerState(PowerState::checkForWarmReset);
++            warmResetCheckTimerStart();
++            break;
+         case Event::resetRequest:
+             reset();
+             break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateWaitForPSPowerOK(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateWaitForPSPowerOK(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKAssert:
++        {
+             // Cancel any GPIO assertions held during the transition
+             gpioAssertTimer.cancel();
+             psPowerOKWatchdogTimer.cancel();
+-            setPowerState(PowerState::on);
++            if (sioEnabled == true)
++            {
++                sioPowerGoodWatchdogTimerStart();
++                setPowerState(PowerState::waitForSIOPowerGood);
++            }
++            else
++            {
++                setPowerState(PowerState::on);
++            }
+             break;
++        }
+         case Event::psPowerOKWatchdogTimerExpired:
+             setPowerState(PowerState::off);
+             psPowerOKFailedLog();
+             break;
++        case Event::sioPowerGoodAssert:
++            psPowerOKWatchdogTimer.cancel();
++            setPowerState(PowerState::on);
++            break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateOff(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateWaitForSIOPowerGood(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
++        case Event::sioPowerGoodAssert:
++            sioPowerGoodWatchdogTimer.cancel();
++            setPowerState(PowerState::on);
++            break;
++        case Event::sioPowerGoodWatchdogTimerExpired:
++            setPowerState(PowerState::off);
++            systemPowerGoodFailedLog();
++            break;
++        default:
++            std::cerr << "No action taken." << std::endl;
++            break;
++        }
++    }
++
++    static void powerStateOff(const Event event)
++    {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKAssert:
++        {
++            if (sioEnabled == true)
++            {
++                sioPowerGoodWatchdogTimerStart();
++                setPowerState(PowerState::waitForSIOPowerGood);
++            }
++            else
++            {
++                setPowerState(PowerState::on);
++            }
++            break;
++        }
++        case Event::sioS5DeAssert:
++            psPowerOKWatchdogTimerStart();
++            setPowerState(PowerState::waitForPSPowerOK);
++            break;
++        case Event::sioPowerGoodAssert:
+             setPowerState(PowerState::on);
+             break;
+         case Event::powerButtonPressed:
+@@ -1302,39 +1819,32 @@ static void powerStateOff(const Event event)
+             powerOn();
+             break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateTransitionToOff(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateTransitionToOff(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKDeAssert:
+             // Cancel any GPIO assertions held during the transition
+             gpioAssertTimer.cancel();
+-            psPowerOKRampDownTimer.cancel();
+             setPowerState(PowerState::off);
+             break;
+-        case Event::psPowerOKRampDownTimerExpired:
+-            psPowerOKRampDownFailedLog();
+-            setPowerState(PowerState::on);
+-            break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateGracefulTransitionToOff(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateGracefulTransitionToOff(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKDeAssert:
+             gracefulPowerOffTimer.cancel();
+             setPowerState(PowerState::off);
+@@ -1342,25 +1852,50 @@ static void powerStateGracefulTransitionToOff(const Event event)
+         case Event::gracefulPowerOffTimerExpired:
+             setPowerState(PowerState::on);
+             break;
++        case Event::powerOffRequest:
++            gracefulPowerOffTimer.cancel();
++            setPowerState(PowerState::transitionToOff);
++            forcePowerOff();
++            break;
++        case Event::powerCycleRequest:
++            gracefulPowerOffTimer.cancel();
++            setPowerState(PowerState::transitionToCycleOff);
++            forcePowerOff();
++            break;
++        case Event::resetRequest:
++            gracefulPowerOffTimer.cancel();
++            setPowerState(PowerState::on);
++            reset();
++            break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateCycleOff(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateCycleOff(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKAssert:
++        {
+             powerCycleTimer.cancel();
+-            setPowerState(PowerState::on);
++            if (sioEnabled == true)
++            {
++                sioPowerGoodWatchdogTimerStart();
++                setPowerState(PowerState::waitForSIOPowerGood);
++            }
++            else
++            {
++                setPowerState(PowerState::on);
++            }
+             break;
+-        case Event::psPowerOKDeAssert:
++        }
++        case Event::sioS5DeAssert:
+             powerCycleTimer.cancel();
+-            setPowerState(PowerState::off);
++            psPowerOKWatchdogTimerStart();
++            setPowerState(PowerState::waitForPSPowerOK);
+             break;
+         case Event::powerButtonPressed:
+             powerCycleTimer.cancel();
+@@ -1373,17 +1908,16 @@ static void powerStateCycleOff(const Event event)
+             powerOn();
+             break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateTransitionToCycleOff(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateTransitionToCycleOff(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKDeAssert:
+             // Cancel any GPIO assertions held during the transition
+             gpioAssertTimer.cancel();
+@@ -1391,17 +1925,16 @@ static void powerStateTransitionToCycleOff(const Event event)
+             powerCycleTimerStart();
+             break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateGracefulTransitionToCycleOff(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateGracefulTransitionToCycleOff(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
+         case Event::psPowerOKDeAssert:
+             gracefulPowerOffTimer.cancel();
+             setPowerState(PowerState::cycleOff);
+@@ -1410,667 +1943,1496 @@ static void powerStateGracefulTransitionToCycleOff(const Event event)
+         case Event::gracefulPowerOffTimerExpired:
+             setPowerState(PowerState::on);
+             break;
++        case Event::powerOffRequest:
++            gracefulPowerOffTimer.cancel();
++            setPowerState(PowerState::transitionToOff);
++            forcePowerOff();
++            break;
++        case Event::powerCycleRequest:
++            gracefulPowerOffTimer.cancel();
++            setPowerState(PowerState::transitionToCycleOff);
++            forcePowerOff();
++            break;
++        case Event::resetRequest:
++            gracefulPowerOffTimer.cancel();
++            setPowerState(PowerState::on);
++            reset();
++            break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void powerStateCheckForWarmReset(const Event event)
+-{
+-    logEvent(__FUNCTION__, event);
+-    switch (event)
++    static void powerStateCheckForWarmReset(const Event event)
+     {
++        logEvent(__FUNCTION__, event);
++        switch (event)
++        {
++        case Event::sioS5Assert:
++            warmResetCheckTimer.cancel();
++            setPowerState(PowerState::transitionToOff);
++            break;
+         case Event::warmResetDetected:
+             setPowerState(PowerState::on);
+             break;
+         case Event::psPowerOKDeAssert:
+             warmResetCheckTimer.cancel();
+             setPowerState(PowerState::off);
++            // DC power is unexpectedly lost, beep
++            beep(beepPowerFail);
+             break;
+         default:
+-            phosphor::logging::log<phosphor::logging::level::INFO>(
+-                "No action taken.");
++            std::cerr << "No action taken." << std::endl;
+             break;
++        }
+     }
+-}
+ 
+-static void psPowerOKHandler()
+-{
+-    gpiod::line_event gpioLineEvent = psPowerOKLine.event_read();
++    static void psPowerOKHandler(bool state)
++    {
++        Event powerControlEvent = state ? Event::psPowerOKAssert
++                                        : Event::psPowerOKDeAssert;
++        sendPowerControlEvent(powerControlEvent);
++    }
+ 
+-    Event powerControlEvent =
+-        gpioLineEvent.event_type == gpiod::line_event::RISING_EDGE
+-            ? Event::psPowerOKAssert
+-            : Event::psPowerOKDeAssert;
++    static void sioPowerGoodHandler(bool state)
++    {
++        Event powerControlEvent = state ? Event::sioPowerGoodAssert
++                                        : Event::sioPowerGoodDeAssert;
++        sendPowerControlEvent(powerControlEvent);
++    }
+ 
+-    sendPowerControlEvent(powerControlEvent);
++    static void sioOnControlHandler(bool state)
++    {
++        std::cerr << "SIO_ONCONTROL value changed: " << static_cast<int>(state) << std::endl;
++    }
+ 
+-    psPowerOKEvent.async_wait(
+-        boost::asio::posix::stream_descriptor::wait_read,
+-        [](const boost::system::error_code ec) {
+-            if (ec)
++    static void sioS5Handler(bool state)
++    {
++        Event powerControlEvent = state ? Event::sioS5DeAssert : Event::sioS5Assert;
++        sendPowerControlEvent(powerControlEvent);
++    }
++
++    static void powerButtonHandler(bool state)
++    {
++        powerButtonIface->set_property("ButtonPressed", !state);
++        if (!state)
++        {
++            powerButtonPressLog();
++            if (!powerButtonMask)
+             {
+-                std::cerr << "power supply power OK handler error: "
+-                          << ec.message() << "\n";
+-                return;
++                sendPowerControlEvent(Event::powerButtonPressed);
++                addRestartCause(RestartCause::powerButton);
+             }
+-            psPowerOKHandler();
+-        });
+-}
+-
+-static void powerButtonHandler()
+-{
+-    gpiod::line_event gpioLineEvent = powerButtonLine.event_read();
++            else
++            {
++                std::cerr << "power button press masked" << std::endl;
++            }
++        }
++    }
+ 
+-    if (gpioLineEvent.event_type == gpiod::line_event::FALLING_EDGE)
++    static void resetButtonHandler(bool state)
+     {
+-        powerButtonPressLog();
+-        powerButtonIface->set_property("ButtonPressed", true);
++        resetButtonIface->set_property("ButtonPressed", !state);
++        if (!state)
++        {
++            resetButtonPressLog();
++            if (!resetButtonMask)
++            {
++                sendPowerControlEvent(Event::resetButtonPressed);
++                addRestartCause(RestartCause::resetButton);
++            }
++            else
++            {
++                std::cerr << "reset button press masked" << std::endl;
++            }
++        }
++    }
+ 
+-        sendPowerControlEvent(Event::powerButtonPressed);
+-        addRestartCause(RestartCause::powerButton);
++#ifdef CHASSIS_SYSTEM_RESET
++    static constexpr auto systemdBusname = "org.freedesktop.systemd1";
++    static constexpr auto systemdPath = "/org/freedesktop/systemd1";
++    static constexpr auto systemdInterface = "org.freedesktop.systemd1.Manager";
++    static constexpr auto systemTargetName = "chassis-system-reset.target";
+ 
++    void systemReset()
++    {
++        conn->async_method_call(
++            [](boost::system::error_code ec)
++            {
++                if (ec)
++                {
++                    std::cerr << "Failed to call chassis system reset: " << ec.message() << std::endl;
++                }
++            },
++            systemdBusname, systemdPath, systemdInterface, "StartUnit",
++            systemTargetName, "replace");
+     }
+-    else if (gpioLineEvent.event_type == gpiod::line_event::RISING_EDGE)
++#endif
++
++    static void nmiSetEnableProperty(bool value)
+     {
+-        powerButtonIface->set_property("ButtonPressed", false);
++        conn->async_method_call(
++            [](boost::system::error_code ec)
++            {
++                if (ec)
++                {
++                    std::cerr << "failed to set NMI source" << std::endl;
++                }
++            },
++            "xyz.openbmc_project.Settings",
++            "/xyz/openbmc_project/Chassis/Control/NMISource",
++            "org.freedesktop.DBus.Properties", "Set",
++            "xyz.openbmc_project.Chassis.Control.NMISource", "Enabled",
++            std::variant<bool>{value});
+     }
+-    powerButtonEvent.async_wait(
+-        boost::asio::posix::stream_descriptor::wait_read,
+-        [](const boost::system::error_code ec) {
+-            if (ec)
++
++    static void nmiReset(void)
++    {
++        const static constexpr int nmiOutPulseTimeMs = 200;
++
++        std::cerr << "NMI out action" << std::endl;
++        nmiOutLine.set_value(nmiOutConfig.polarity);
++        std::cerr << nmiOutConfig.lineName << " set to " << nmiOutConfig.polarity << std::endl;
++        gpioAssertTimer.expires_after(std::chrono::milliseconds(nmiOutPulseTimeMs));
++        gpioAssertTimer.async_wait([](const boost::system::error_code ec)
++                                   {
++        // restore the NMI_OUT GPIO line back to the opposite value
++        nmiOutLine.set_value(!nmiOutConfig.polarity);
++        std::cerr << nmiOutConfig.lineName << " released" << std::endl;
++        if (ec)
++        {
++            // operation_aborted is expected if timer is canceled before
++            // completion.
++            if (ec != boost::asio::error::operation_aborted)
+             {
+-                std::cerr << "power button handler error: " << ec.message()
+-                          << "\n";
+-                return;
++                std::cerr << nmiOutConfig.lineName << " async_wait failed: " <<  ec.message() << std::endl;
+             }
+-            powerButtonHandler();
+-        });
+-}
+-
+-static void resetButtonHandler()
+-{
+-    gpiod::line_event gpioLineEvent = resetButtonLine.event_read();
++        } });
++        // log to redfish
++        nmiDiagIntLog();
++        std::cerr << "NMI out action completed" << std::endl;
++        // reset Enable Property
++        nmiSetEnableProperty(false);
++    }
+ 
+-    if (gpioLineEvent.event_type == gpiod::line_event::FALLING_EDGE)
++    static void nmiSourcePropertyMonitor(void)
+     {
+-        resetButtonPressLog();
+-        resetButtonIface->set_property("ButtonPressed", true);
+-
+-        sendPowerControlEvent(Event::resetButtonPressed);
+-        addRestartCause(RestartCause::resetButton);
+-
++        std::cerr << "NMI Source Property Monitor" << std::endl;
++
++        static std::unique_ptr<sdbusplus::bus::match::match> nmiSourceMatch =
++            std::make_unique<sdbusplus::bus::match::match>(
++                *conn,
++                "type='signal',interface='org.freedesktop.DBus.Properties',"
++                "member='PropertiesChanged',"
++                "arg0namespace='xyz.openbmc_project.Chassis.Control.NMISource'",
++                [](sdbusplus::message::message &msg)
++                {
++                    std::string interfaceName;
++                    boost::container::flat_map<std::string, std::variant<bool, std::string>>
++                        propertiesChanged;
++                    std::string state;
++                    bool value = true;
++                    try
++                    {
++                        msg.read(interfaceName, propertiesChanged);
++                        if (propertiesChanged.begin()->first == "Enabled")
++                        {
++                            value = std::get<bool>(propertiesChanged.begin()->second);
++                            std::cerr << "NMI Enabled propertiesChanged value: " << value << std::endl;
++                            nmiEnabled = value;
++                            if (nmiEnabled)
++                            {
++                                nmiReset();
++                            }
++                        }
++                    }
++                    catch (const std::exception &e)
++                    {
++                        std::cerr << "Unable to read NMI source: " << e.what() << std::endl;
++                        return;
++                    }
++                });
+     }
+-    else if (gpioLineEvent.event_type == gpiod::line_event::RISING_EDGE)
++
++    static void setNmiSource()
+     {
+-        resetButtonIface->set_property("ButtonPressed", false);
++        conn->async_method_call(
++            [](boost::system::error_code ec)
++            {
++                if (ec)
++                {
++                    std::cerr << "failed to set NMI source" << std::endl;
++                }
++            },
++            "xyz.openbmc_project.Settings",
++            "/xyz/openbmc_project/Chassis/Control/NMISource",
++            "org.freedesktop.DBus.Properties", "Set",
++            "xyz.openbmc_project.Chassis.Control.NMISource", "BMCSource",
++            std::variant<std::string>{
++                "xyz.openbmc_project.Chassis.Control.NMISource.BMCSourceSignal.FrontPanelButton"});
++        // set Enable Property
++        nmiSetEnableProperty(true);
+     }
+-    resetButtonEvent.async_wait(
+-        boost::asio::posix::stream_descriptor::wait_read,
+-        [](const boost::system::error_code ec) {
+-            if (ec)
++
++    static void nmiButtonHandler(bool state)
++    {
++        // Don't handle event if host not running and config doesn't force it
++        if (!nmiWhenPoweredOff &&
++            getHostState(powerState) !=
++                "xyz.openbmc_project.State.Host.HostState.Running")
++        {
++            return;
++        }
++        nmiButtonIface->set_property("ButtonPressed", !state);
++        if (!state)
++        {
++            nmiButtonPressLog();
++            if (nmiButtonMasked)
+             {
+-                std::cerr << "reset button handler error: " << ec.message()
+-                          << "\n";
+-                return;
++                std::cerr << "NMI button press masked" << std::endl;
+             }
+-            resetButtonHandler();
+-        });
+-}
++            else
++            {
++                setNmiSource();
++            }
++        }
++    }
+ 
+-static void P0ThermtripHandler()
+-{
+-    gpiod::line_event gpioLineEvent = P0ThermtripLine.event_read();
++    static void idButtonHandler(bool state)
++    {
++        idButtonIface->set_property("ButtonPressed", !state);
++    }
+ 
+-    if (gpioLineEvent.event_type == gpiod::line_event::FALLING_EDGE)
++    static void pltRstHandler(bool pltRst)
+     {
+-        std::string ras_err_msg = "P0 Thermtrip detected. BMC will issue RSMRST";
+-        sd_journal_print(LOG_DEBUG, "P0 Thermtrip received, issue RSMRST\n");
+-        sd_journal_send("MESSAGE=%s", ras_err_msg.c_str(), "PRIORITY=%i",
+-                        LOG_ERR, "REDFISH_MESSAGE_ID=%s",
+-                        "OpenBMC.0.1.CPUError", "REDFISH_MESSAGE_ARGS=%s",
+-                        ras_err_msg.c_str(), NULL);
+-        RSMreset();
++        if (pltRst)
++        {
++            sendPowerControlEvent(Event::pltRstDeAssert);
++        }
++        else
++        {
++            sendPowerControlEvent(Event::pltRstAssert);
++        }
+     }
+ 
+-    P0ThermtripEvent.async_wait(
+-        boost::asio::posix::stream_descriptor::wait_read,
+-        [](const boost::system::error_code ec) {
+-            if (ec)
++    [[maybe_unused]] static void hostMiscHandler(sdbusplus::message::message &msg)
++    {
++        std::string interfaceName;
++        boost::container::flat_map<std::string, std::variant<bool>>
++            propertiesChanged;
++        try
++        {
++            msg.read(interfaceName, propertiesChanged);
++        }
++        catch (const std::exception &e)
++        {
++            std::cerr << "Unable to read Host Misc status: " << e.what() << std::endl;
++            return;
++        }
++        if (propertiesChanged.empty())
++        {
++            std::cerr << "ERROR: Empty Host.Misc PropertiesChanged signal received" << std::endl;
++            return;
++        }
++
++        for (auto &[property, value] : propertiesChanged)
++        {
++            if (property == "ESpiPlatformReset")
+             {
+-                std::cerr << "P0 Thermtrip handler error: "
+-                          << ec.message() << "\n";
+-                return;
++                bool *pltRst = std::get_if<bool>(&value);
++                if (pltRst == nullptr)
++                {
++                    std::cerr << property << " property invalid" << std::endl;
++                    return;
++                }
++                pltRstHandler(*pltRst);
+             }
+-            P0ThermtripHandler();
+-        });
+-}
+-
+-static void P1ThermtripHandler()
+-{
+-    gpiod::line_event gpioLineEvent = P1ThermtripLine.event_read();
++        }
++    }
+ 
+-    if (gpioLineEvent.event_type == gpiod::line_event::FALLING_EDGE)
++    static void postCompleteHandler(bool state)
+     {
+-        std::string ras_err_msg = "P1 Thermtrip detected. BMC will issue RSMRST";
+-        sd_journal_print(LOG_DEBUG, "P1 Thermtrip received, issue RSMRST\n");
+-        sd_journal_send("MESSAGE=%s", ras_err_msg.c_str(), "PRIORITY=%i",
+-                        LOG_ERR, "REDFISH_MESSAGE_ID=%s",
+-                        "OpenBMC.0.1.CPUError", "REDFISH_MESSAGE_ARGS=%s",
+-                        ras_err_msg.c_str(), NULL);
+-        RSMreset();
++        if (!state)
++        {
++            sendPowerControlEvent(Event::postCompleteAssert);
++            setOperatingSystemState(OperatingSystemStateStage::Standby);
++        }
++        else
++        {
++            sendPowerControlEvent(Event::postCompleteDeAssert);
++            setOperatingSystemState(OperatingSystemStateStage::Inactive);
++        }
+     }
+ 
+-    P1ThermtripEvent.async_wait(
+-        boost::asio::posix::stream_descriptor::wait_read,
+-        [](const boost::system::error_code ec) {
+-            if (ec)
++    static int loadConfigValues()
++    {
++        const std::string configFilePath =
++            "/usr/share/x86-power-control/power-config-host" + power_control::node +
++            ".json";
++        std::ifstream configFile(configFilePath.c_str());
++        if (!configFile.is_open())
++        {
++            std::cerr << "loadConfigValues: Cannot open config path: " << configFilePath << std::endl;
++            return -1;
++        }
++        auto jsonData = nlohmann::json::parse(configFile, nullptr, true, true);
++
++        if (jsonData.is_discarded())
++        {
++            std::cerr << "Power config readings JSON parser failure" << std::endl;
++            return -1;
++        }
++        auto gpios = jsonData["gpio_configs"];
++        auto timers = jsonData["timing_configs"];
++
++        ConfigData *tempGpioData;
++
++        for (nlohmann::json &gpioConfig : gpios)
++        {
++            if (!gpioConfig.contains("Name"))
+             {
+-                std::cerr << "P1 Thermtrip handler error: "
+-                          << ec.message() << "\n";
+-                return;
++                std::cerr << "The 'Name' field must be defined in Json file" << std::endl;
++                return -1;
+             }
+-            P1ThermtripHandler();
+-        });
+-}
+ 
+-static constexpr auto systemdBusname = "org.freedesktop.systemd1";
+-static constexpr auto systemdPath = "/org/freedesktop/systemd1";
+-static constexpr auto systemdInterface = "org.freedesktop.systemd1.Manager";
+-static constexpr auto systemTargetName = "chassis-system-reset.target";
+-
+-void systemReset()
+-{
+-    conn->async_method_call(
+-        [](boost::system::error_code ec) {
+-            if (ec)
++            // Iterate through the powersignal map to check if the gpio json config
++            // entry is valid
++            std::string gpioName = gpioConfig["Name"];
++            auto signalMapIter = powerSignalMap.find(gpioName);
++            if (signalMapIter == powerSignalMap.end())
+             {
+-                phosphor::logging::log<phosphor::logging::level::ERR>(
+-                    "Failed to call chassis system reset",
+-                    phosphor::logging::entry("ERR=%s", ec.message().c_str()));
++                std::cerr << gpioName << " is not a recognized power-control signal name" << std::endl;
++                return -1;
+             }
+-        },
+-        systemdBusname, systemdPath, systemdInterface, "StartUnit",
+-        systemTargetName, "replace");
+-}
+ 
+-static void nmiSetEnableProperty(bool value)
+-{
+-    conn->async_method_call(
+-        [](boost::system::error_code ec) {
+-            if (ec)
++            // assign the power signal name to the corresponding structure reference
++            // from map then fillup the structure with coressponding json config
++            // value
++            tempGpioData = signalMapIter->second;
++            tempGpioData->name = gpioName;
++
++            if (!gpioConfig.contains("Type"))
+             {
+-                std::cerr << "failed to set NMI source\n";
++                std::cerr << "The \'Type\' field must be defined in Json file" << std::endl;
++                return -1;
+             }
+-        },
+-        "xyz.openbmc_project.Settings",
+-        "/xyz/openbmc_project/Chassis/Control/NMISource",
+-        "org.freedesktop.DBus.Properties", "Set",
+-        "xyz.openbmc_project.Chassis.Control.NMISource", "Enabled",
+-        std::variant<bool>{value});
+-}
+-
+-static void nmiReset()
+-{
+-    const static constexpr int nmiOutPulseTimeMs = 200;
+-    setGPIOOutputForMs("ASSERT_NMI_BTN_L", 0, nmiOutPulseTimeMs);
+ 
+-    // log to redfish
+-    nmiDiagIntLog();
+-    std::cerr << "NMI out action completed\n";
+-    // reset Enable Property
+-    nmiSetEnableProperty(false);
+-}
++            std::string signalType = gpioConfig["Type"];
++            if (signalType == "GPIO")
++            {
++                tempGpioData->type = ConfigType::GPIO;
++            }
++            else if (signalType == "DBUS")
++            {
++                tempGpioData->type = ConfigType::DBUS;
++            }
++            else
++            {
++                std::cerr << signalType << " is not a recognized power-control signal type" << std::endl;
++                return -1;
++            }
+ 
+-static void nmiSourcePropertyMonitor(void)
+-{
+-    std::cerr << " NMI Source Property Monitor \n";
+-
+-    static std::unique_ptr<sdbusplus::bus::match::match> nmiSourceMatch =
+-        std::make_unique<sdbusplus::bus::match::match>(
+-            *conn,
+-            "type='signal',interface='org.freedesktop.DBus.Properties',"
+-            "member='PropertiesChanged',arg0namespace='xyz.openbmc_project."
+-            "Chassis.Control."
+-            "NMISource'",
+-            [](sdbusplus::message::message& msg) {
+-                std::string interfaceName;
+-                boost::container::flat_map<std::string,
+-                                           std::variant<bool, std::string>>
+-                    propertiesChanged;
+-                std::string state;
+-                bool value = true;
+-                try
++            if (tempGpioData->type == ConfigType::GPIO)
++            {
++                if (gpioConfig.contains("LineName"))
++                {
++                    tempGpioData->lineName = gpioConfig["LineName"];
++                }
++                else
++                {
++                    std::cerr << "The \'LineName\' field must be defined for GPIO configuration" << std::endl;
++                    return -1;
++                }
++                if (gpioConfig.contains("Polarity"))
+                 {
+-                    msg.read(interfaceName, propertiesChanged);
+-                    if (propertiesChanged.begin()->first == "Enabled")
++                    std::string polarity = gpioConfig["Polarity"];
++                    if (polarity == "ActiveLow")
+                     {
+-                        value =
+-                            std::get<bool>(propertiesChanged.begin()->second);
+-                        std::cerr
+-                            << " NMI Enabled propertiesChanged value: " << value
+-                            << "\n";
+-                        nmiEnabled = value;
+-                        if (nmiEnabled)
+-                        {
+-                            nmiReset();
+-                        }
++                        tempGpioData->polarity = false;
++                    }
++                    else if (polarity == "ActiveHigh")
++                    {
++                        tempGpioData->polarity = true;
++                    }
++                    else
++                    {
++                        std::cerr << "Polarity defined but not properly setup. Please only ActiveHigh or ActiveLow. Currently set to " << polarity << std::endl;
++                        return -1;
+                     }
+                 }
+-                catch (std::exception& e)
++                else
+                 {
+-                    std::cerr << "Unable to read NMI source\n";
+-                    return;
++                    std::cerr << "Polarity field not found for " << tempGpioData->lineName << std::endl;
++                    return -1;
+                 }
+-            });
+-}
++            }
++            else
++            {
++                // if dbus based gpio config is defined read and update the dbus
++                // params corresponding to the gpio config instance
++                for (auto &[key, dbusParamName] : dbusParams)
++                {
++                    if (!gpioConfig.contains(dbusParamName))
++                    {
++                        std::cerr << "The " << dbusParamName << " field must be defined for Dbus configuration ";
++                        return -1;
++                    }
++                }
++                tempGpioData->dbusName =
++                    gpioConfig[dbusParams[DbusConfigType::name]];
++                tempGpioData->path = gpioConfig[dbusParams[DbusConfigType::path]];
++                tempGpioData->interface =
++                    gpioConfig[dbusParams[DbusConfigType::interface]];
++                tempGpioData->lineName =
++                    gpioConfig[dbusParams[DbusConfigType::property]];
++            }
++        }
++
++        // read and store the timer values from json config to Timer Map
++        for (auto &[key, timerValue] : TimerMap)
++        {
++            if (timers.contains(key.c_str()))
++            {
++                timerValue = timers[key.c_str()];
++            }
++        }
++
++        // If "events_configs" key is not in json config, fallback to null
++        auto events = jsonData.value("event_configs",
++                                     nlohmann::json(nlohmann::json::value_t::null));
++        if (events.is_object())
++        {
++            nmiWhenPoweredOff = events.value("NMIWhenPoweredOff", true);
++        }
++
++        return 0;
++    }
++
++    static bool getDbusMsgGPIOState(sdbusplus::message::message &msg,
++                                    const std::string &lineName, bool &value)
++    {
++        std::string thresholdInterface;
++        std::string event;
++        boost::container::flat_map<std::string, std::variant<bool>>
++            propertiesChanged;
++        try
++        {
++            msg.read(thresholdInterface, propertiesChanged);
++            if (propertiesChanged.empty())
++            {
++                return false;
++            }
++
++            event = propertiesChanged.begin()->first;
++            if (event.empty() || event != lineName)
++            {
++                return false;
++            }
++
++            value = std::get<bool>(propertiesChanged.begin()->second);
++            return true;
++        }
++        catch (const std::exception &e)
++        {
++            std::cerr << "exception while reading dbus property \'" << lineName << "\': " << e.what() << std::endl;
++            return false;
++        }
++    }
++
++    static sdbusplus::bus::match::match
++    dbusGPIOMatcher(const ConfigData &cfg, std::function<void(bool)> onMatch)
++    {
++        auto pulseEventMatcherCallback = [&cfg,
++                                          onMatch](sdbusplus::message::message &msg)
++        {
++            bool value = false;
++            if (!getDbusMsgGPIOState(msg, cfg.lineName, value))
++            {
++                return;
++            }
++            onMatch(value);
++        };
++
++        return sdbusplus::bus::match::match(
++            static_cast<sdbusplus::bus::bus &>(*conn),
++            "type='signal',interface='org.freedesktop.DBus.Properties',member='"
++            "PropertiesChanged',arg0='" +
++                cfg.interface + "'",
++            std::move(pulseEventMatcherCallback));
++    }
++
++    // D-Bus property read functions
++    void reschedulePropertyRead(const ConfigData &configData);
++
++    int getProperty(const ConfigData &configData)
++    {
++        std::variant<bool> resp;
++
++        try
++        {
++            auto method = conn->new_method_call(
++                configData.dbusName.c_str(), configData.path.c_str(),
++                "org.freedesktop.DBus.Properties", "Get");
++            method.append(configData.interface.c_str(),
++                          configData.lineName.c_str());
++
++            auto reply = conn->call(method);
++            if (reply.is_method_error())
++            {
++                std::cerr << "Error reading " << configData.lineName << " D-Bus property on interface " << configData.interface << " and path " << configData.path << std::endl;
++                return -1;
++            }
++
++            reply.read(resp);
++        }
++        catch (const sdbusplus::exception_t &e)
++        {
++            std::cerr << "Exception while reading " << configData.lineName << ": " << e.what() << std::endl;
++            reschedulePropertyRead(configData);
++            return -1;
++        }
+ 
+-static void setNmiSource()
++        auto respValue = std::get_if<bool>(&resp);
++        if (!respValue)
++        {
++            std::cerr << "Error: " << configData.lineName << " D-Bus property is not the expected type" << std::endl;
++            return -1;
++        }
++        return (*respValue);
++    }
++
++    void setInitialValue(const ConfigData &configData, bool initialValue)
++    {
++        if (configData.name == "PowerOk")
++        {
++            powerState = (initialValue ? PowerState::on : PowerState::off);
++            hostIface->set_property("CurrentHostState",
++                                    std::string(getHostState(powerState)));
++        }
++        else if (configData.name == "PowerButton")
++        {
++            powerButtonIface->set_property("ButtonPressed", !initialValue);
++        }
++        else if (configData.name == "ResetButton")
++        {
++            resetButtonIface->set_property("ButtonPressed", !initialValue);
++        }
++        else if (configData.name == "NMIButton")
++        {
++            nmiButtonIface->set_property("ButtonPressed", !initialValue);
++        }
++        else if (configData.name == "IdButton")
++        {
++            idButtonIface->set_property("ButtonPressed", !initialValue);
++        }
++        else if (configData.name == "PostComplete")
++        {
++            OperatingSystemStateStage osState =
++                (initialValue ? OperatingSystemStateStage::Inactive
++                              : OperatingSystemStateStage::Standby);
++            setOperatingSystemState(osState);
++        }
++        else
++        {
++            std::cerr << "Unknown name " << configData.name << std::endl;
++        }
++    }
++
++    void reschedulePropertyRead(const ConfigData &configData)
++    {
++        auto item = dBusRetryTimers.find(configData.name);
++
++        if (item == dBusRetryTimers.end())
++        {
++            auto newItem = dBusRetryTimers.insert(
++                std::make_pair(configData.name, boost::asio::steady_timer(io)));
++
++            if (!newItem.second)
++            {
++                std::cerr << "Failed to add new timer for " << configData.name << std::endl;
++                return;
++            }
++
++            item = newItem.first;
++        }
++
++        auto &timer = item->second;
++        timer.expires_after(
++            std::chrono::milliseconds(TimerMap["DbusGetPropertyRetry"]));
++        timer.async_wait([&configData](const boost::system::error_code ec)
++                         {
++        if (ec)
++        {
++            std::cerr << "Retry timer for " << configData.name <<" failed: " << ec.message() << std::endl;
++            dBusRetryTimers.erase(configData.name);
++            return;
++        }
++
++        int property = getProperty(configData);
++
++        if (property >= 0)
++        {
++            setInitialValue(configData, (property > 0));
++            dBusRetryTimers.erase(configData.name);
++        } });
++    }
++} // namespace power_control
++
++int main(int argc, char *argv[])
+ {
+-    conn->async_method_call(
+-        [](boost::system::error_code ec) {
+-            if (ec)
++    using namespace power_control;
++
++    if (argc > 1)
++    {
++        node = argv[1];
++    }
++    std::cerr << "Start Chassis power control service for host : " << node << std::endl;
++    //   node);
++
++    conn = std::make_shared<sdbusplus::asio::connection>(io);
++
++    // Load GPIO's through json config file
++    if (loadConfigValues() == -1)
++    {
++        std::cerr << "Host" << node << ": Error in Parsing..." << std::endl;
++    }
++    /* Currently for single host based systems additional busname is added
++    with "0" at the end of the name ex : xyz.openbmc_project.State.Host0.
++    Going forward for single hosts the old bus name without zero numbering
++    will be removed when all other applications adapted to the
++    bus name with zero numbering (xyz.openbmc_project.State.Host0). */
++
++    if (node == "0")
++    {
++        // Request all the dbus names
++        conn->request_name(hostDbusName.c_str());
++        conn->request_name(chassisDbusName.c_str());
++        conn->request_name(osDbusName.c_str());
++        conn->request_name(buttonDbusName.c_str());
++        conn->request_name(nmiDbusName.c_str());
++        conn->request_name(rstCauseDbusName.c_str());
++    }
++
++    hostDbusName += node;
++    chassisDbusName += node;
++    osDbusName += node;
++    buttonDbusName += node;
++    nmiDbusName += node;
++    rstCauseDbusName += node;
++
++    // Request all the dbus names
++    conn->request_name(hostDbusName.c_str());
++    conn->request_name(chassisDbusName.c_str());
++    conn->request_name(osDbusName.c_str());
++    conn->request_name(buttonDbusName.c_str());
++    conn->request_name(nmiDbusName.c_str());
++    conn->request_name(rstCauseDbusName.c_str());
++
++    if (sioPwrGoodConfig.lineName.empty() ||
++        sioOnControlConfig.lineName.empty() || sioS5Config.lineName.empty())
++    {
++        sioEnabled = false;
++        std::cerr << "SIO control GPIOs not defined, disable SIO support." << std::endl;
++    }
++
++    // Request PS_PWROK GPIO events
++    if (powerOkConfig.type == ConfigType::GPIO)
++    {
++        if (!requestGPIOEvents(powerOkConfig.lineName, psPowerOKHandler,
++                               psPowerOKLine, psPowerOKEvent))
++        {
++            return -1;
++        }
++    }
++    else if (powerOkConfig.type == ConfigType::DBUS)
++    {
++        static sdbusplus::bus::match::match powerOkEventMonitor =
++            power_control::dbusGPIOMatcher(powerOkConfig, psPowerOKHandler);
++    }
++    else
++    {
++        std::cerr << "PowerOk name should be configured from json config file" << std::endl;
++        return -1;
++    }
++
++    if (sioEnabled == true)
++    {
++        // Request SIO_POWER_GOOD GPIO events
++        if (sioPwrGoodConfig.type == ConfigType::GPIO)
++        {
++            if (!requestGPIOEvents(sioPwrGoodConfig.lineName,
++                                   sioPowerGoodHandler, sioPowerGoodLine,
++                                   sioPowerGoodEvent))
+             {
+-                std::cerr << "failed to set NMI source\n";
++                return -1;
+             }
+-        },
+-        "xyz.openbmc_project.Settings",
+-        "/xyz/openbmc_project/Chassis/Control/NMISource",
+-        "org.freedesktop.DBus.Properties", "Set",
+-        "xyz.openbmc_project.Chassis.Control.NMISource", "BMCSource",
+-        std::variant<std::string>{"xyz.openbmc_project.Chassis.Control."
+-                                  "NMISource.BMCSourceSignal.FpBtn"});
+-    // set Enable Property
+-    nmiSetEnableProperty(true);
+-}
++        }
++        else if (sioPwrGoodConfig.type == ConfigType::DBUS)
++        {
++            static sdbusplus::bus::match::match sioPwrGoodEventMonitor =
++                power_control::dbusGPIOMatcher(sioPwrGoodConfig,
++                                               sioPowerGoodHandler);
++        }
++        else
++        {
++            std::cerr << "sioPwrGood name should be configured from json config file" << std::endl;
++            return -1;
++        }
++
++        // Request SIO_ONCONTROL GPIO events
++        if (sioOnControlConfig.type == ConfigType::GPIO)
++        {
++            if (!requestGPIOEvents(sioOnControlConfig.lineName,
++                                   sioOnControlHandler, sioOnControlLine,
++                                   sioOnControlEvent))
++            {
++                return -1;
++            }
++        }
++        else if (sioOnControlConfig.type == ConfigType::DBUS)
++        {
++            static sdbusplus::bus::match::match sioOnControlEventMonitor =
++                power_control::dbusGPIOMatcher(sioOnControlConfig,
++                                               sioOnControlHandler);
++        }
++        else
++        {
++            std::cerr << "sioOnControl name should be configured from jsonconfig file" << std::endl;
++            return -1;
++        }
++
++        // Request SIO_S5 GPIO events
++        if (sioS5Config.type == ConfigType::GPIO)
++        {
++            if (!requestGPIOEvents(sioS5Config.lineName, sioS5Handler,
++                                   sioS5Line, sioS5Event))
++            {
++                return -1;
++            }
++        }
++        else if (sioS5Config.type == ConfigType::DBUS)
++        {
++            static sdbusplus::bus::match::match sioS5EventMonitor =
++                power_control::dbusGPIOMatcher(sioS5Config, sioS5Handler);
++        }
++        else
++        {
++            std::cerr << "sioS5 name should be configured from json config file" << std::endl;
++            return -1;
++        }
++    }
+ 
+-} // namespace power_control
++    // Request POWER_BUTTON GPIO events
++    if (powerButtonConfig.type == ConfigType::GPIO)
++    {
++        if (!requestGPIOEvents(powerButtonConfig.lineName, powerButtonHandler,
++                               powerButtonLine, powerButtonEvent))
++        {
++            return -1;
++        }
++    }
++    else if (powerButtonConfig.type == ConfigType::DBUS)
++    {
++        static sdbusplus::bus::match::match powerButtonEventMonitor =
++            power_control::dbusGPIOMatcher(powerButtonConfig,
++                                           powerButtonHandler);
++    }
+ 
+-int main(int argc, char* argv[])
+-{
+-    const std::string P0ThermTrip = "P0_THERMTRIP_L";
+-    const std::string P1ThermTrip = "P1_THERMTRIP_L";
+-    const std::string MonRSMRST   = "MON_RSMRST_L";
+-    gpiod::line gpioLine;
++    // Request RESET_BUTTON GPIO events
++    if (resetButtonConfig.type == ConfigType::GPIO)
++    {
++        if (!requestGPIOEvents(resetButtonConfig.lineName, resetButtonHandler,
++                               resetButtonLine, resetButtonEvent))
++        {
++            return -1;
++        }
++    }
++    else if (resetButtonConfig.type == ConfigType::DBUS)
++    {
++        static sdbusplus::bus::match::match resetButtonEventMonitor =
++            power_control::dbusGPIOMatcher(resetButtonConfig,
++                                           resetButtonHandler);
++    }
+ 
+-    std::cerr << "Start Chassis power control service...\n";
++    // Request NMI_BUTTON GPIO events
++    if (nmiButtonConfig.type == ConfigType::GPIO)
++    {
++        if (!nmiButtonConfig.lineName.empty())
++        {
++            requestGPIOEvents(nmiButtonConfig.lineName, nmiButtonHandler,
++                              nmiButtonLine, nmiButtonEvent);
++        }
++    }
++    else if (nmiButtonConfig.type == ConfigType::DBUS)
++    {
++        static sdbusplus::bus::match::match nmiButtonEventMonitor =
++            power_control::dbusGPIOMatcher(nmiButtonConfig, nmiButtonHandler);
++    }
+ 
+-    if (system("/usr/sbin/dimm-info.sh") != 0)
+-        std::cerr << "Error calling dimm-info.sh in Chassis power control service \n";
+-    power_control::conn =
+-        std::make_shared<sdbusplus::asio::connection>(power_control::io);
++    // Request ID_BUTTON GPIO events
++    if (idButtonConfig.type == ConfigType::GPIO)
++    {
++        if (!idButtonConfig.lineName.empty())
++        {
++            requestGPIOEvents(idButtonConfig.lineName, idButtonHandler,
++                              idButtonLine, idButtonEvent);
++        }
++    }
++    else if (idButtonConfig.type == ConfigType::DBUS)
++    {
++        static sdbusplus::bus::match::match idButtonEventMonitor =
++            power_control::dbusGPIOMatcher(idButtonConfig, idButtonHandler);
++    }
+ 
+-    // Request all the dbus names
+-    power_control::conn->request_name("xyz.openbmc_project.State.Host");
+-    power_control::conn->request_name("xyz.openbmc_project.State.Chassis");
+-    power_control::conn->request_name("xyz.openbmc_project.State.OperatingSystem");
+-    power_control::conn->request_name("xyz.openbmc_project.Chassis.Buttons");
+-    power_control::conn->request_name("xyz.openbmc_project.Control.Host.NMI");
+-    power_control::conn->request_name("xyz.openbmc_project.Control.Host.RestartCause");
++#ifdef USE_PLT_RST
++    sdbusplus::bus::match::match pltRstMatch(
++        *conn,
++        "type='signal',interface='org.freedesktop.DBus.Properties',member='"
++        "PropertiesChanged',arg0='xyz.openbmc_project.State.Host.Misc'",
++        hostMiscHandler);
++#endif
+ 
+-    // Request PS_PWROK GPIO events
+-    power_control::requestGPIOEvents("MON_PWR_GOOD", power_control::psPowerOKHandler, power_control::psPowerOKLine, power_control::psPowerOKEvent);
++    // Request POST_COMPLETE GPIO events
++    if (postCompleteConfig.type == ConfigType::GPIO)
++    {
++        if (!requestGPIOEvents(postCompleteConfig.lineName, postCompleteHandler,
++                               postCompleteLine, postCompleteEvent))
++        {
++            return -1;
++        }
++    }
++    else if (postCompleteConfig.type == ConfigType::DBUS)
++    {
++        static sdbusplus::bus::match::match postCompleteEventMonitor =
++            power_control::dbusGPIOMatcher(postCompleteConfig,
++                                           postCompleteHandler);
++    }
++    else
++    {
++        std::cerr << "postComplete name should be configured from json config file" << std::endl;
++        return -1;
++    }
+ 
+-    // Request POWER_BUTTON GPIO events
+-    power_control::requestGPIOEvents("MON_PWR_BTN_L", power_control::powerButtonHandler, power_control::powerButtonLine, power_control::powerButtonEvent);
++    // initialize NMI_OUT GPIO.
++    if (!nmiOutConfig.lineName.empty())
++    {
++        setGPIOOutput(nmiOutConfig.lineName, !nmiOutConfig.polarity,
++                      nmiOutLine);
++    }
+ 
+-    // Request RESET_BUTTON GPIO events
+-    power_control::requestGPIOEvents("MON_RST_BTN_L", power_control::resetButtonHandler, power_control::resetButtonLine, power_control::resetButtonEvent);
++    // Initialize POWER_OUT and RESET_OUT GPIO.
++    gpiod::line line;
++    if (!powerOutConfig.lineName.empty())
++    {
++        if (!setGPIOOutput(powerOutConfig.lineName, !powerOutConfig.polarity,
++                           line))
++        {
++            return -1;
++        }
++    }
++    else
++    {
++        std::cerr << "powerOut name should be configured from json config file" << std::endl;
++        return -1;
++    }
+ 
+-    // Request P0 Thermtrip GPIO events
+-    gpioLine = gpiod::find_line(P0ThermTrip);
+-    if(gpioLine)
++    if (!resetOutConfig.lineName.empty())
+     {
+-        std::cerr << "P0_THERMTRIP_L is present \n";
+-        power_control::requestGPIOEvents("P0_THERMTRIP_L",
+-            power_control::P0ThermtripHandler, power_control::P0ThermtripLine, power_control::P0ThermtripEvent);
++        if (!setGPIOOutput(resetOutConfig.lineName, !resetOutConfig.polarity,
++                           line))
++        {
++            return -1;
++        }
+     }
+-    // Request P1 Thermtrip GPIO events
+-    gpioLine = gpiod::find_line(P1ThermTrip);
+-    if(gpioLine)
++    else
+     {
+-        std::cerr << "P1_THERMTRIP_L is present \n";
+-        power_control::requestGPIOEvents("P1_THERMTRIP_L",
+-            power_control::P1ThermtripHandler, power_control::P1ThermtripLine, power_control::P1ThermtripEvent);
++        std::cerr << "ResetOut name should be configured from json config file" << std::endl;
++        return -1;
+     }
++    // Release line
++    line.reset();
+ 
+-    // Initialize the power state
+-    power_control::powerState = power_control::PowerState::off;
++    // Initialize the power state and operating system state
++    powerState = PowerState::off;
++    operatingSystemState = OperatingSystemStateStage::Inactive;
+     // Check power good
+-    if (power_control::psPowerOKLine.get_value() > 0)
++
++    if (powerOkConfig.type == ConfigType::GPIO)
++    {
++        if (psPowerOKLine.get_value() > 0 ||
++            (sioEnabled &&
++             (sioPowerGoodLine.get_value() == sioPwrGoodConfig.polarity)))
++        {
++            powerState = PowerState::on;
++        }
++    }
++    else
+     {
+-        power_control::powerState = power_control::PowerState::on;
++        if (getProperty(powerOkConfig))
++        {
++            powerState = PowerState::on;
++        }
+     }
+-
+-    // Initialize the power state storage
+-    if (power_control::initializePowerStateStorage() < 0)
++    // Check if we need to start the Power Restore policy
++    if (powerState != PowerState::on)
+     {
+-        std::cerr << "initializePowerStateStorage return Error ";
+-        return -1;
++        powerRestore.run();
+     }
+ 
+-    power_control::nmiSourcePropertyMonitor();
++    if (nmiOutLine)
++        nmiSourcePropertyMonitor();
+ 
+-    std::cerr << "Initializing power state. ";
+-    power_control::logStateTransition(power_control::powerState);
++    std::cerr << "Initializing power state." << std::endl;
++    logStateTransition(powerState);
+ 
+     // Power Control Service
+     sdbusplus::asio::object_server hostServer =
+-        sdbusplus::asio::object_server(power_control::conn);
++        sdbusplus::asio::object_server(conn);
+ 
+     // Power Control Interface
+-    power_control::hostIface = hostServer.add_interface(
+-        "/xyz/openbmc_project/state/host0", "xyz.openbmc_project.State.Host");
+-
+-    power_control::hostIface->register_property(
++    hostIface =
++        hostServer.add_interface("/xyz/openbmc_project/state/host" + node,
++                                 "xyz.openbmc_project.State.Host");
++    // Interface for IPMI/Redfish initiated host state transitions
++    hostIface->register_property(
+         "RequestedHostTransition",
+         std::string("xyz.openbmc_project.State.Host.Transition.Off"),
+-        [](const std::string& requested, std::string& resp) {
++        [](const std::string &requested, std::string &resp)
++        {
+             if (requested == "xyz.openbmc_project.State.Host.Transition.Off")
+             {
+-                sendPowerControlEvent(
+-                    power_control::Event::gracefulPowerOffRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if power button is masked, ignore this
++                if (!powerButtonMask)
++                {
++                    sendPowerControlEvent(Event::gracefulPowerOffRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Power Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+-            else if (requested ==
+-                     "xyz.openbmc_project.State.Host.Transition.On")
++            else if (requested == "xyz.openbmc_project.State.Host.Transition.On")
+             {
+-                sendPowerControlEvent(power_control::Event::powerOnRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if power button is masked, ignore this
++                if (!powerButtonMask)
++                {
++                    sendPowerControlEvent(Event::powerOnRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Power Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+             else if (requested ==
+                      "xyz.openbmc_project.State.Host.Transition.Reboot")
+             {
+-                sendPowerControlEvent(power_control::Event::powerCycleRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if power button is masked, ignore this
++                if (!powerButtonMask)
++                {
++                    sendPowerControlEvent(Event::powerCycleRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Power Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+-            else if (requested == "xyz.openbmc_project.State.Host.Transition."
+-                                  "GracefulWarmReboot")
++            else if (requested ==
++                     "xyz.openbmc_project.State.Host.Transition.GracefulWarmReboot")
+             {
+-                sendPowerControlEvent(
+-                    power_control::Event::gracefulPowerCycleRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if reset button is masked, ignore this
++                if (!resetButtonMask)
++                {
++                    sendPowerControlEvent(Event::gracefulPowerCycleRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Reset Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+-            else if (requested == "xyz.openbmc_project.State.Host.Transition."
+-                                  "ForceWarmReboot")
++            else if (requested ==
++                     "xyz.openbmc_project.State.Host.Transition.ForceWarmReboot")
+             {
+-                sendPowerControlEvent(power_control::Event::resetRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if reset button is masked, ignore this
++                if (!resetButtonMask)
++                {
++                    sendPowerControlEvent(Event::resetRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Reset Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+             else
+             {
+-                std::cerr << "Unrecognized host state transition request.\n";
++                std::cerr << "Unrecognized host state transition request." << std::endl;
+                 throw std::invalid_argument("Unrecognized Transition Request");
+                 return 0;
+             }
+             resp = requested;
+             return 1;
+         });
+-    power_control::hostIface->register_property(
+-        "CurrentHostState",
+-        std::string(power_control::getHostState(power_control::powerState)));
++    hostIface->register_property("CurrentHostState",
++                                 std::string(getHostState(powerState)));
+ 
+-    power_control::hostIface->initialize();
++    hostIface->initialize();
+ 
+     // Chassis Control Service
+     sdbusplus::asio::object_server chassisServer =
+-        sdbusplus::asio::object_server(power_control::conn);
++        sdbusplus::asio::object_server(conn);
+ 
+     // Chassis Control Interface
+-    power_control::chassisIface =
+-        chassisServer.add_interface("/xyz/openbmc_project/state/chassis0",
++    chassisIface =
++        chassisServer.add_interface("/xyz/openbmc_project/state/chassis" + node,
+                                     "xyz.openbmc_project.State.Chassis");
+ 
+-    power_control::chassisIface->register_property(
++    chassisIface->register_property(
+         "RequestedPowerTransition",
+         std::string("xyz.openbmc_project.State.Chassis.Transition.Off"),
+-        [](const std::string& requested, std::string& resp) {
++        [](const std::string &requested, std::string &resp)
++        {
+             if (requested == "xyz.openbmc_project.State.Chassis.Transition.Off")
+             {
+-                sendPowerControlEvent(power_control::Event::powerOffRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if power button is masked, ignore this
++                if (!powerButtonMask)
++                {
++                    sendPowerControlEvent(Event::powerOffRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Power Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+-            else if (requested ==
+-                     "xyz.openbmc_project.State.Chassis.Transition.On")
++            else if (requested == "xyz.openbmc_project.State.Chassis.Transition.On")
+             {
+-                sendPowerControlEvent(power_control::Event::powerOnRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if power button is masked, ignore this
++                if (!powerButtonMask)
++                {
++                    sendPowerControlEvent(Event::powerOnRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Power Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+             else if (requested ==
+                      "xyz.openbmc_project.State.Chassis.Transition.PowerCycle")
+             {
+-                sendPowerControlEvent(power_control::Event::powerCycleRequest);
+-                addRestartCause(power_control::RestartCause::command);
++                // if power button is masked, ignore this
++                if (!powerButtonMask)
++                {
++                    sendPowerControlEvent(Event::powerCycleRequest);
++                    addRestartCause(RestartCause::command);
++                }
++                else
++                {
++                    std::cerr << "Power Button Masked." << std::endl;
++                    throw std::invalid_argument("Transition Request Masked");
++                    return 0;
++                }
+             }
+             else
+             {
+-                std::cerr << "Unrecognized chassis state transition request.\n";
++                std::cerr << "Unrecognized chassis state transition request." << std::endl;
+                 throw std::invalid_argument("Unrecognized Transition Request");
+                 return 0;
+             }
+             resp = requested;
+             return 1;
+         });
+-    power_control::chassisIface->register_property(
+-        "CurrentPowerState",
+-        std::string(power_control::getChassisState(power_control::powerState)));
+-    power_control::chassisIface->register_property(
+-        "LastStateChangeTime", power_control::getCurrentTimeMs());
++    chassisIface->register_property("CurrentPowerState",
++                                    std::string(getChassisState(powerState)));
++    chassisIface->register_property("LastStateChangeTime", getCurrentTimeMs());
+ 
+-    power_control::chassisIface->initialize();
++    chassisIface->initialize();
+ 
++#ifdef CHASSIS_SYSTEM_RESET
+     // Chassis System Service
+     sdbusplus::asio::object_server chassisSysServer =
+-        sdbusplus::asio::object_server(power_control::conn);
++        sdbusplus::asio::object_server(conn);
+ 
+     // Chassis System Interface
+-    power_control::chassisSysIface = chassisSysServer.add_interface(
++    chassisSysIface = chassisSysServer.add_interface(
+         "/xyz/openbmc_project/state/chassis_system0",
+         "xyz.openbmc_project.State.Chassis");
+ 
+-    power_control::chassisSysIface->register_property(
++    chassisSysIface->register_property(
+         "RequestedPowerTransition",
+         std::string("xyz.openbmc_project.State.Chassis.Transition.On"),
+-        [](const std::string& requested, std::string& resp) {
++        [](const std::string &requested, std::string &resp)
++        {
+             if (requested ==
+                 "xyz.openbmc_project.State.Chassis.Transition.PowerCycle")
+             {
+-                power_control::systemReset();
+-                addRestartCause(power_control::RestartCause::command);
++                systemReset();
++                addRestartCause(RestartCause::command);
+             }
+             else
+             {
+-                std::cerr << "Unrecognized chassis system state transition "
+-                             "request.\n";
++                std::cerr << "Unrecognized chassis system state transition request." << std::endl;
+                 throw std::invalid_argument("Unrecognized Transition Request");
+                 return 0;
+             }
+             resp = requested;
+             return 1;
+         });
+-    power_control::chassisSysIface->register_property(
+-        "CurrentPowerState",
+-        std::string(power_control::getChassisState(power_control::powerState)));
+-    power_control::chassisSysIface->register_property(
+-        "LastStateChangeTime", power_control::getCurrentTimeMs());
++    chassisSysIface->register_property(
++        "CurrentPowerState", std::string(getChassisState(powerState)));
++    chassisSysIface->register_property("LastStateChangeTime",
++                                       getCurrentTimeMs());
++
++    chassisSysIface->initialize();
++
++    if (!slotPowerConfig.lineName.empty())
++    {
++        if (!setGPIOOutput(slotPowerConfig.lineName, 1, slotPowerLine))
++        {
++            return -1;
++        }
+ 
+-    power_control::chassisSysIface->initialize();
++        slotPowerState = SlotPowerState::off;
++        if (slotPowerLine.get_value() > 0)
++        {
++            slotPowerState = SlotPowerState::on;
++        }
+ 
++        chassisSlotIface = chassisSysServer.add_interface(
++            "/xyz/openbmc_project/state/chassis_system" + node,
++            "xyz.openbmc_project.State.Chassis");
++        chassisSlotIface->register_property(
++            "RequestedPowerTransition",
++            std::string("xyz.openbmc_project.State.Chassis.Transition.On"),
++            [](const std::string &requested, std::string &resp)
++            {
++                if (requested == "xyz.openbmc_project.State.Chassis.Transition.On")
++                {
++                    slotPowerOn();
++                }
++                else if (requested ==
++                         "xyz.openbmc_project.State.Chassis.Transition.Off")
++                {
++                    slotPowerOff();
++                }
++                else if (requested ==
++                         "xyz.openbmc_project.State.Chassis.Transition.PowerCycle")
++                {
++                    slotPowerCycle();
++                }
++                else
++                {
++                    std::cerr << "Unrecognized chassis system state transition request." << std::endl;
++                    throw std::invalid_argument("Unrecognized Transition Request");
++                    return 0;
++                }
++                resp = requested;
++                return 1;
++            });
++        chassisSlotIface->register_property(
++            "CurrentPowerState", std::string(getSlotState(slotPowerState)));
++        chassisSlotIface->register_property("LastStateChangeTime",
++                                            getCurrentTimeMs());
++        chassisSlotIface->initialize();
++    }
++#endif
+     // Buttons Service
+     sdbusplus::asio::object_server buttonsServer =
+-        sdbusplus::asio::object_server(power_control::conn);
+-
+-    // Power Button Interface
+-    power_control::powerButtonIface = buttonsServer.add_interface(
+-        "/xyz/openbmc_project/chassis/buttons/power",
+-        "xyz.openbmc_project.Chassis.Buttons");
+-
+-    // Check power button state
+-    bool powerButtonPressed = power_control::powerButtonLine.get_value() == 0;
+-    power_control::powerButtonIface->register_property("ButtonPressed",
+-                                                       powerButtonPressed);
+-
+-    power_control::powerButtonIface->initialize();
+-
+-    // Reset Button Interface
+-    power_control::resetButtonIface = buttonsServer.add_interface(
+-        "/xyz/openbmc_project/chassis/buttons/reset",
+-        "xyz.openbmc_project.Chassis.Buttons");
+-
+-    // Check reset button state
+-    bool resetButtonPressed = power_control::resetButtonLine.get_value() == 0;
+-    std::cerr << "resetButtonPressed: "<< resetButtonPressed <<"!\n";
+-    power_control::resetButtonIface->register_property("ButtonPressed",
+-                                                       resetButtonPressed);
+-
+-    power_control::resetButtonIface->initialize();
+-
+-
+-    // NMI Button Interface
+-    power_control::nmiButtonIface = buttonsServer.add_interface(
+-        "/xyz/openbmc_project/chassis/buttons/nmi",
+-        "xyz.openbmc_project.Chassis.Buttons");
+-
+-    // Check NMI button state
+-    bool nmiButtonPressed = false;
+-    power_control::nmiButtonIface->register_property("ButtonPressed",
+-                                                      nmiButtonPressed);
+-
+-    power_control::nmiButtonIface->initialize();
+-
+-    // NMI out Service
+-    sdbusplus::asio::object_server nmiOutServer =
+-    sdbusplus::asio::object_server(power_control::conn);
+-
+-    // NMI out Interface
+-    power_control::nmiOutIface =
+-    nmiOutServer.add_interface("/xyz/openbmc_project/control/host0/nmi",
+-                                       "xyz.openbmc_project.Control.Host.NMI");
+-    power_control::nmiOutIface->register_method("NMI",
+-                                                 power_control::nmiReset);
+-    power_control::nmiOutIface->initialize();
+-
+-    // NMI out Interface
+-    power_control::rsmOutIface =
+-    nmiOutServer.add_interface("/xyz/openbmc_project/control/host0/SOCReset",
+-                                       "xyz.openbmc_project.Control.Host.SOCReset");
+-    power_control::rsmOutIface->register_method("SOCReset",
+-                                                 power_control::RSMreset);
+-    power_control::rsmOutIface->initialize();
++        sdbusplus::asio::object_server(conn);
++
++    if (!powerButtonConfig.lineName.empty())
++    {
++        // Power Button Interface
++        power_control::powerButtonIface = buttonsServer.add_interface(
++            "/xyz/openbmc_project/chassis/buttons/power",
++            "xyz.openbmc_project.Chassis.Buttons");
++
++        powerButtonIface->register_property(
++            "ButtonMasked", false, [](const bool requested, bool &current)
++            {
++            if (requested)
++            {
++                if (powerButtonMask)
++                {
++                    return 1;
++                }
++                if (!setGPIOOutput(powerOutConfig.lineName,
++                                   !powerOutConfig.polarity, powerButtonMask))
++                {
++                    throw std::runtime_error("Failed to request GPIO");
++                    return 0;
++                }
++                std::cerr << "Power Button Masked." << std::endl;
++            }
++            else
++            {
++                if (!powerButtonMask)
++                {
++                    return 1;
++                }
++                std::cerr << "Power Button Un-masked" << std::endl;
++                powerButtonMask.reset();
++            }
++            // Update the mask setting
++            current = requested;
++            return 1; });
++
++        // Check power button state
++        bool powerButtonPressed;
++        if (powerButtonConfig.type == ConfigType::GPIO)
++        {
++            powerButtonPressed = powerButtonLine.get_value() == 0;
++        }
++        else
++        {
++            powerButtonPressed = getProperty(powerButtonConfig) == 0;
++        }
++
++        powerButtonIface->register_property("ButtonPressed",
++                                            powerButtonPressed);
++
++        powerButtonIface->initialize();
++    }
++
++    if (!resetButtonConfig.lineName.empty())
++    {
++        // Reset Button Interface
++
++        resetButtonIface = buttonsServer.add_interface(
++            "/xyz/openbmc_project/chassis/buttons/reset",
++            "xyz.openbmc_project.Chassis.Buttons");
++
++        resetButtonIface->register_property(
++            "ButtonMasked", false, [](const bool requested, bool &current)
++            {
++            if (requested)
++            {
++                if (resetButtonMask)
++                {
++                    return 1;
++                }
++                if (!setGPIOOutput(resetOutConfig.lineName,
++                                   !resetOutConfig.polarity, resetButtonMask))
++                {
++                    throw std::runtime_error("Failed to request GPIO");
++                    return 0;
++                }
++                std::cerr << "Reset Button Masked."<< std::endl;
++            }
++            else
++            {
++                if (!resetButtonMask)
++                {
++                    return 1;
++                }
++                std::cerr << "Reset Button Un-masked" << std::endl;
++                resetButtonMask.reset();
++            }
++            // Update the mask setting
++            current = requested;
++            return 1; });
++
++        // Check reset button state
++        bool resetButtonPressed;
++        if (resetButtonConfig.type == ConfigType::GPIO)
++        {
++            resetButtonPressed = resetButtonLine.get_value() == 0;
++        }
++        else
++        {
++            resetButtonPressed = getProperty(resetButtonConfig) == 0;
++        }
++
++        resetButtonIface->register_property("ButtonPressed",
++                                            resetButtonPressed);
++
++        resetButtonIface->initialize();
++    }
++
++    if (nmiButtonLine)
++    {
++        // NMI Button Interface
++        nmiButtonIface = buttonsServer.add_interface(
++            "/xyz/openbmc_project/chassis/buttons/nmi",
++            "xyz.openbmc_project.Chassis.Buttons");
++
++        nmiButtonIface->register_property(
++            "ButtonMasked", false, [](const bool requested, bool &current)
++            {
++            if (nmiButtonMasked == requested)
++            {
++                // NMI button mask is already set as requested, so no change
++                return 1;
++            }
++            if (requested)
++            {
++                std::cerr << "NMI Button Masked." << std::endl;
++                nmiButtonMasked = true;
++            }
++            else
++            {
++                std::cerr << "NMI Button Un-masked." << std::endl;
++                nmiButtonMasked = false;
++            }
++            // Update the mask setting
++            current = nmiButtonMasked;
++            return 1; });
++
++        // Check NMI button state
++        bool nmiButtonPressed;
++        if (nmiButtonConfig.type == ConfigType::GPIO)
++        {
++            nmiButtonPressed = nmiButtonLine.get_value() == 0;
++        }
++        else
++        {
++            nmiButtonPressed = getProperty(nmiButtonConfig) == 0;
++        }
++
++        nmiButtonIface->register_property("ButtonPressed", nmiButtonPressed);
++
++        nmiButtonIface->initialize();
++    }
++
++    if (nmiOutLine)
++    {
++        // NMI out Service
++        sdbusplus::asio::object_server nmiOutServer =
++            sdbusplus::asio::object_server(conn);
++
++        // NMI out Interface
++        nmiOutIface = nmiOutServer.add_interface(
++            "/xyz/openbmc_project/control/host" + node + "/nmi",
++            "xyz.openbmc_project.Control.Host.NMI");
++        nmiOutIface->register_method("NMI", nmiReset);
++        nmiOutIface->initialize();
++    }
++
++    if (idButtonLine)
++    {
++        // ID Button Interface
++        idButtonIface = buttonsServer.add_interface(
++            "/xyz/openbmc_project/chassis/buttons/id",
++            "xyz.openbmc_project.Chassis.Buttons");
++
++        // Check ID button state
++        bool idButtonPressed;
++        if (idButtonConfig.type == ConfigType::GPIO)
++        {
++            idButtonPressed = idButtonLine.get_value() == 0;
++        }
++        else
++        {
++            idButtonPressed = getProperty(idButtonConfig) == 0;
++        }
++
++        idButtonIface->register_property("ButtonPressed", idButtonPressed);
++
++        idButtonIface->initialize();
++    }
+ 
+     // OS State Service
+     sdbusplus::asio::object_server osServer =
+-        sdbusplus::asio::object_server(power_control::conn);
++        sdbusplus::asio::object_server(conn);
+ 
+     // OS State Interface
+-    power_control::osIface = osServer.add_interface(
+-        "/xyz/openbmc_project/state/os",
++    osIface = osServer.add_interface(
++        "/xyz/openbmc_project/state/host" + node,
+         "xyz.openbmc_project.State.OperatingSystem.Status");
+ 
+     // Get the initial OS state based on POST complete
+     //      0: Asserted, OS state is "Standby" (ready to boot)
+     //      1: De-Asserted, OS state is "Inactive"
+-    std::string osState = power_control::getGPIOValue("MON_POST_COMPLETE") > 0
+-                              ? "Standby"
+-                              : "Inactive";
++    OperatingSystemStateStage osState;
++    if (postCompleteConfig.type == ConfigType::GPIO)
++    {
++        osState = postCompleteLine.get_value() > 0
++                      ? OperatingSystemStateStage::Inactive
++                      : OperatingSystemStateStage::Standby;
++    }
++    else
++    {
++        osState = getProperty(postCompleteConfig) > 0
++                      ? OperatingSystemStateStage::Inactive
++                      : OperatingSystemStateStage::Standby;
++    }
+ 
+-    power_control::osIface->register_property("OperatingSystemState",
+-                                              std::string(osState));
++    osIface->register_property(
++        "OperatingSystemState",
++        std::string(getOperatingSystemStateStage(osState)));
+ 
+-    power_control::osIface->initialize();
++    osIface->initialize();
+ 
+     // Restart Cause Service
+     sdbusplus::asio::object_server restartCauseServer =
+-        sdbusplus::asio::object_server(power_control::conn);
++        sdbusplus::asio::object_server(conn);
+ 
+     // Restart Cause Interface
+-    power_control::restartCauseIface = restartCauseServer.add_interface(
+-        "/xyz/openbmc_project/control/host0/restart_cause",
++    restartCauseIface = restartCauseServer.add_interface(
++        "/xyz/openbmc_project/control/host" + node + "/restart_cause",
+         "xyz.openbmc_project.Control.Host.RestartCause");
+ 
+-    power_control::restartCauseIface->register_property(
++    restartCauseIface->register_property(
+         "RestartCause",
+         std::string("xyz.openbmc_project.State.Host.RestartCause.Unknown"));
+ 
+-    power_control::restartCauseIface->register_property(
++    restartCauseIface->register_property(
+         "RequestedRestartCause",
+         std::string("xyz.openbmc_project.State.Host.RestartCause.Unknown"),
+-        [](const std::string& requested, std::string& resp) {
++        [](const std::string &requested, std::string &resp)
++        {
+             if (requested ==
+                 "xyz.openbmc_project.State.Host.RestartCause.WatchdogTimer")
+             {
+-                power_control::addRestartCause(
+-                    power_control::RestartCause::watchdog);
++                addRestartCause(RestartCause::watchdog);
+             }
+             else
+             {
+-                throw std::invalid_argument(
+-                    "Unrecognized RestartCause Request");
++                throw std::invalid_argument("Unrecognized RestartCause Request");
+                 return 0;
+             }
+ 
+-            std::cerr << "RestartCause requested: " << requested << "\n";
++            std::cerr << "RestartCause requested: " << requested << std::endl;
+             resp = requested;
+             return 1;
+         });
+ 
+-    power_control::restartCauseIface->initialize();
+-
+-    power_control::currentHostStateMonitor();
+-
+-
+-    // Set TOGGLE_RSMRST to Low
+-    power_control::setGPIOOutput("RSMRST", 0, gpioLine);
+-
+-    // Set ASSERT_WARM_RST_BTN_L to High
+-    if (!power_control::setGPIOOutput("ASSERT_WARM_RST_BTN_L", 1, gpioLine))
+-    {
+-        return -1;
+-    }
+-
+-    // Set ASSERT_NMI_BTN_L to High
+-    if (!power_control::setGPIOOutput("ASSERT_NMI_BTN_L", 1, gpioLine))
+-    {
+-        return -1;
+-    }
+-
+-    // Set ASSERT_RST_BTN_L to High
+-    if (!power_control::setGPIOOutput("ASSERT_RST_BTN_L", 1, gpioLine))
+-    {
+-        return -1;
+-    }
+-
+-    // Set ASSERT_PWR_BTN_L to High
+-    if (!power_control::setGPIOOutput("ASSERT_PWR_BTN_L", 1, gpioLine))
+-    {
+-        return -1;
+-    }
++    restartCauseIface->initialize();
+ 
+-    // Set BMC_READY to High
+-    if (!power_control::setGPIOOutput("ASSERT_BMC_READY", 1, gpioLine))
+-    {
+-        return -1;
+-    }
++    currentHostStateMonitor();
+ 
+-    // check RSMRST line for max 1 sec
+-    gpioLine = gpiod::find_line(MonRSMRST);
+-    if(gpioLine)
++    if (!hpmStbyEnConfig.lineName.empty())
+     {
+-        if (power_control::getGPIOValue(MonRSMRST) == 0)
++        // Set to indicate BMC's power control module is ready to take
++        // the inputs [PWR_GOOD] from the HPM FPGA
++        gpiod::line hpmLine;
++        if (!setGPIOOutput(hpmStbyEnConfig.lineName, hpmStbyEnConfig.polarity,
++                           hpmLine))
+         {
+-            std::cerr << "RSMRST = 0, Sleep for 1 sec  \n";
+-            sleep(MON_RSMRST_SLEEP_SEC);
++            return -1;
+         }
+     }
+-    // Check if we need to start the Power Restore policy
+-    power_control::powerRestorePolicyCheck();
+-
+-    //Starting YAAP service
+-    system("systemctl start yaapd.service");
+ 
+-    power_control::io.run();
++    io.run();
+ 
+     return 0;
+-}
++}
+\ No newline at end of file
+diff --git a/power-control-x86/src/power_control.hpp b/power-control-x86/src/power_control.hpp
+new file mode 100644
+index 0000000..9f0653c
+--- /dev/null
++++ b/power-control-x86/src/power_control.hpp
+@@ -0,0 +1,164 @@
++/*
++ * SPDX-License-Identifier: Apache-2.0
++ * Copyright (C) 2021-2022 YADRO.
++ */
++
++#pragma once
++
++#include <boost/asio/io_context.hpp>
++#include <boost/asio/steady_timer.hpp>
++#include <boost/container/flat_map.hpp>
++#include <nlohmann/json.hpp>
++#include <sdbusplus/asio/object_server.hpp>
++
++#include <filesystem>
++#include <list>
++#include <string_view>
++
++namespace power_control
++{
++
++/**
++ * @brief Persistent State Manager
++ *
++ * This manager supposed to store runtime parameters that supposed to be
++ * persistent over BMC reboot. It provides simple Get/Set interface and handle
++ * default values, hardcoded in getDefault() method.
++ * @note: currently only string parameters supported
++ */
++using dbusPropertiesList =
++    boost::container::flat_map<std::string,
++                               std::variant<std::string, uint64_t>>;
++/**
++ * @brief The class contains functions to invoke power restore policy.
++ *
++ * This class only exists to unite all PowerRestore-related code. It supposed
++ * to run only once on application startup.
++ */
++class PowerRestoreController
++{
++  public:
++    PowerRestoreController(boost::asio::io_context& io) :
++        policyInvoked(false), powerRestoreDelay(-1), powerRestoreTimer(io),
++        timerFired(false)
++    {}
++    /**
++     * @brief Power Restore entry point.
++     *
++     * Call this to start Power Restore algorithm.
++     */
++    void run();
++    /**
++     * @brief Initialize configuration parameters.
++     *
++     * Parse list of properties, received from dbus, to set Power Restore
++     * algorithm configuration.
++     * @param props - map of property names and values
++     */
++    void setProperties(const dbusPropertiesList& props);
++
++  private:
++    bool policyInvoked;
++    std::string powerRestorePolicy;
++    int powerRestoreDelay;
++    std::list<sdbusplus::bus::match_t> matches;
++    boost::asio::steady_timer powerRestoreTimer;
++    bool timerFired;
++#ifdef USE_ACBOOT
++    std::string acBoot;
++#endif // USE_ACBOOT
++
++    /**
++     * @brief Check if all required algorithms parameters are set
++     *
++     * Call this after set any of Power Restore algorithm parameters. Once all
++     * parameters are set this will run invoke() function.
++     */
++    void invokeIfReady();
++    /**
++     * @brief Actually perform power restore actions.
++     *
++     * Take Power Restore actions according to Policy and other parameters.
++     */
++    void invoke();
++    /**
++     * @brief Check if power was dropped.
++     *
++     * Read last saved power state to determine if host power was enabled before
++     * last BMC reboot.
++     */
++    bool wasPowerDropped();
++};
++
++class PersistentState
++{
++  public:
++    /**
++     * List of all supported parameters
++     */
++    enum class Params
++    {
++        PowerState,
++    };
++
++    /**
++     * @brief Persistent storage initialization
++     *
++     * Class constructor automatically load last state from JSON file
++     */
++    PersistentState();
++    /**
++     * @brief Persistent storage cleanup
++     *
++     * Class destructor automatically save state to JSON file
++     */
++    ~PersistentState();
++    /**
++     * @brief Get parameter value from the storage
++     *
++     * Get the parameter from cached storage. Default value returned, if
++     * parameter was not set before.
++     * @param parameter - parameter to get
++     * @return parameter value
++     */
++    const std::string get(Params parameter);
++    /**
++     * @brief Store parameter value
++     *
++     * Set the parameter value in cached storage and dump it to disk.
++     * @param parameter - parameter to set
++     * @param value - parameter value to assign
++     */
++    void set(Params parameter, const std::string& value);
++
++  private:
++    nlohmann::json stateData;
++    const std::filesystem::path powerControlDir = "/var/lib/power-control";
++    const std::string_view stateFile = "state.json";
++    const int indentationSize = 2;
++
++    /**
++     * @brief Covert parameter ID to name
++     *
++     * Get the name corresponding to the given parameter.
++     * String name only used by the manager internal to generate human-readable
++     * JSON.
++     * @param parameter - parameter to convert
++     * @return parameter name
++     */
++    const std::string getName(const Params parameter);
++    /**
++     * @brief Get default parameter value
++     *
++     * Get the default value, associated with given parameter.
++     * @param parameter - parameter to get
++     * @return parameter default value
++     */
++    const std::string getDefault(const Params parameter);
++    /**
++     * @brief Save cache to file on disk
++     */
++    void saveState();
++};
++
++} // namespace power_control
+-- 
+2.25.1
+

@@ -1,0 +1,16 @@
+[Unit]
+Description=This Is Systemd Task Moni Service
+Requires=mapper-wait@-xyz-openbmc_project-state-chassis0
+After=mapper-wait@-xyz-openbmc_project-state-chassis0
+Requires=mapper-wait@-xyz-openbmc_project-Logging-IPMI
+After=mapper-wait@-xyz-openbmc_project-Logging-IPMI
+Requires=xyz.openbmc_project.Logging.service
+After=xyz.openbmc_project.Logging.service
+
+[Service]
+Type=dbus
+BusName=xyz.openbmc_project.dissen
+Restart=on-failure
+ExecStart=/usr/bin/dissen-monitor
+[Install]
+WantedBy=multi-user.target
