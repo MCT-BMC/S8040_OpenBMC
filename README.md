@@ -39,7 +39,6 @@ As an example target S8040
 * Supported platforms (case sensitive)
   * s8040
   * s8047
-  * s8050
 
 ### 4) Build
 
@@ -76,6 +75,8 @@ After the build process finishes, you can find the BMC firmware image
   The OpenBMC bootloader
 
 Additionally, there are two tarballs created that can be deployed and unpacked by REST:
+
+
 
 * `<platform>-<timestamp>.all.tar`
   The complete BMC flash content: A single file (image-bmc) wrapped in a tar archive.
